@@ -1,0 +1,607 @@
+---
+title: "Split .h5 file based on Cell Hashing"
+author: 
+ - Lucas Graybuck
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: hide
+    df_print: paged
+    self_contained: true
+params:
+  in_h5: NULL
+  in_mat: NULL
+  in_mol: NULL
+  in_tbl: NULL
+  in_well: NULL
+  out_dir: NULL
+---
+
+<a id="contents"></a>
+
+## Contents
+
+#### [Data Processing](#data_processing)
+- [Session Preparation](#session_preparation)
+- [Load Inputs](#load_inputs)
+- [Split by Hash](#split_by_hash)
+- [Data Output](#data_output)
+
+#### [QC Metrics and Plots](#qc_metrics)
+  - [HTO-Based QC](#hash_qc)
+  - [Counts](#counts)
+  - [Reads](#reads)
+  - [UMIs](#umis)
+  - [Genes](#genes)
+- [Write QC JSON](#json_out)
+
+#### [Session Info](#session_info)
+
+
+<a id="data_processing"></a>
+
+## Data Processing
+
+<a id="session_preparation"></a>
+
+### Session Preparation
+
+#### Load libraries:
+```{r Load Libraries}
+start_time <- Sys.time()
+
+quiet_library <- function(...) {
+  suppressPackageStartupMessages(library(...))
+}
+quiet_library(rhdf5)
+quiet_library(H5weaver)
+quiet_library(Matrix)
+quiet_library(ggplot2)
+quiet_library(cowplot)
+```
+
+Declaring start
+```{r Declare start}
+stm("Starting .h5 split")
+stm(paste0("Using H5weaver v", installed.packages()["H5weaver","Version"]))
+```
+
+#### Argument parsing
+```{r Parse arguments}
+if(is.null(params$in_h5)) {
+  in_h5 <- system.file("testdata/well1_with_metadata.h5", package = "H5weaver")
+  in_mol <- system.file("testdata/well1_molecule_info.h5", package = "H5weaver")
+  in_mat <- system.file("testdata/well1_count_matrix.csv.gz", package = "H5weaver")
+  in_tbl <- system.file("testdata/well1_category_table.csv.gz", package = "H5weaver")
+  in_well <- "B000-P0C0W0"
+  out_dir <- tempdir()
+} else {
+  in_h5 <- params$in_h5
+  in_mol <- params$in_mol
+  in_mat <- params$in_mat
+  in_tbl <- params$in_tbl
+  in_well <- params$in_well
+  out_dir <- params$out_dir
+}
+
+stm(paste0("IN  H5 file         : ", in_h5))
+stm(paste0("IN  MolInfo(Ignored): ", in_mol))
+stm(paste0("IN  Count matrix    : ", in_mat))
+stm(paste0("IN  Category table  : ", in_tbl))
+stm(paste0("IN  Well ID         : ", in_well))
+stm(paste0("OUT Directory       : ", out_dir))
+```
+
+#### Input Parameters
+```{r Print Arguments}
+print(c(
+  paste0("IN  H5 file         : ", in_h5),
+  paste0("IN  MolInfo(Ignored): ", in_mol),
+  paste0("IN  Count matrix    : ", in_mat),
+  paste0("IN  Category table  : ", in_tbl),
+  paste0("IN  Well ID         : ", in_well),
+  paste0("OUT Directory       : ", out_dir)
+))
+```
+
+[Return to Contents](#contents)
+
+<a id="load_inputs"></a>
+
+### Load inputs
+
+#### Load HTO counts
+```{r Load Count Matrix}
+stm(paste0("Loading HTO count matrix from ", in_mat))
+hash_count_df <- fread(in_mat)
+
+hash_count_mat <- as.matrix(hash_count_df[,-1])
+
+rownames(hash_count_mat) <- hash_count_df[[1]]
+rm(hash_count_df)
+```
+
+#### Load HTO categories
+```{r Load Category Table}
+stm(paste0("Loading HTO category table from ", in_tbl))
+hash_category_table <- fread(in_tbl)
+
+hto_barcodes <- unique(hash_category_table$hto_barcode[hash_category_table$hto_category == "singlet"])
+```
+
+#### Output File Targets
+```{r Display Outputs}
+output_h5_files <- file.path(out_dir, paste0(in_well, "_", 
+                                             c(hto_barcodes,"multiplet"),
+                                             ".h5"))
+
+output_messages <- paste0("OUT HDF5            : ", output_h5_files)
+
+for(i in seq_along(output_messages)) {
+  stm(output_messages[i])
+}
+
+out_json <- file.path(out_dir, paste0(in_well, "_split_h5_metrics.json"))
+
+json_message <- paste0(paste0("OUT JSON            : ", out_json))
+
+stm(json_message)
+
+print(output_messages)
+print(json_message)
+```
+
+#### Load scRNA-seq Dataset
+```{r Load Query}
+stm(paste0("Loading HDF5 from ", in_h5))
+h5_list <- h5dump(in_h5)
+```
+
+[Return to Contents](#contents)
+
+<a id="split_by_hash"></a>
+
+### Assemble data
+
+#### Add hash data to the list object
+```{r Add Hash Data}
+stm("Adding hash data to cellranger results")
+
+h5_list <- add_h5_list_hash_results(h5_list,
+                                    hash_category_table,
+                                    hash_count_mat,
+                                    match_target = "original_barcodes")
+```
+
+#### Split list based on hashes
+```{r Split H5 Lists}
+stm("Splitting HDF5 based on Hash Category Table")
+split_h5_list <- split_h5_list_by_hash(h5_list)
+```
+
+[Return to Contents](#contents)
+
+<a id="data_output"></a>
+
+### Write Output
+
+#### Write HDF5 files
+```{r Write split files}
+for(i in seq_along(split_h5_list)) {
+  out_file <- file.path(out_dir, paste0(in_well, "_", names(split_h5_list)[i],".h5"))
+  stm(paste0("Writing HDF5 to ", out_file))
+  write_h5_list(split_h5_list[[i]],
+                h5_file = out_file,
+                overwrite = TRUE)
+  h5closeAll()
+}
+```
+
+[Return to Contents](#contents)
+
+<a id="qc_metrics"></a>
+
+## QC Tables and Plots
+
+Extract metadata for plotting
+```{r Assemble Metadata}
+stm("Generating tables and plots for report")
+meta <- h5_list_cell_metadata(h5_list)
+
+qc_list <- list(report_type = "split_h5_by_hash",
+                report_datetime = as.character(start_time),
+                report_uuid = ids::uuid(use_time = TRUE),
+                package = "H5weaver",
+                package_version = sessionInfo()$otherPkgs$H5weaver$Version,
+                well_id = in_well)
+```
+
+[Return to Contents](#contents)
+
+<a id="hash_qc"></a>
+
+### HTO Category QC
+
+Metadata prep
+```{r}
+meta <- as.data.table(meta)
+if("pbmc_sample_id" %in% names(meta)) {
+  meta$plot_barcode <- paste0(meta$hto_barcode,"\n",meta$pbmc_sample_id)
+} else {
+  meta$pbmc_sample_id <- "No PBMC ID"
+  meta$plot_barcode <- meta$hto_barcode
+}
+```
+
+<a id="counts"></a>
+
+#### HTO Category Counts
+```{r HTO Category Read UMI Gene Stats}
+hto_order <- c("no_hash","singlet","doublet","multiplet")
+
+hto_count_stats <- meta[, .(n_cells = nrow(.SD),
+                            frac_cells = round(nrow(.SD)/nrow(meta), 4),
+                            total_aligned_reads = sum(.SD$n_reads),
+                            frac_all_aligned_reads = round(sum(.SD$n_reads)/sum(meta$n_reads), 4)),
+                        by = hto_category]
+hto_count_stats <- hto_count_stats[match(hto_order,hto_count_stats$hto_category),]
+
+qc_list$hto_category_stats <- lapply(1:nrow(hto_count_stats),
+                                      function(x) {
+                                        list(n_cells = hto_count_stats$n_cells[x],
+                                             frac_cells = hto_count_stats$frac_cells[x],
+                                             total_aligned_reads = hto_count_stats$total_aligned_reads[x],
+                                             frac_all_aligned_reads = hto_count_stats$frac_all_aligned_reads[x])
+                                      })
+names(qc_list$hto_category_stats) <- hto_count_stats$hto_category
+
+qc_table(hto_count_stats)
+```
+
+#### HTO Category Count Barplot
+```{r Category Count Barplot}
+hto_count_stats$fill <- c("black",
+                          "darkblue",
+                          "dodgerblue",
+                          "mediumorchid4")
+
+category_counts_barplot <- ggplot() +
+  geom_bar(data = hto_count_stats,
+           aes(x = as.factor(1:nrow(hto_count_stats)),
+               y = n_cells,
+               fill = fill),
+           stat = "identity") +
+  geom_text(data = hto_count_stats,
+            aes(x = as.factor(1:nrow(hto_count_stats)),
+                y = n_cells + 0.02 * max(n_cells),
+                label = n_cells),
+            hjust = 0.5,
+            vjust = 0) +
+  scale_fill_identity() +
+  scale_x_discrete("",
+                   breaks = 1:nrow(hto_count_stats),
+                   labels = hto_count_stats$hto_category) +
+  scale_y_continuous("N Cells", limits = c(0, 4e4)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 0,
+                                   vjust = 0.3)) +
+  ggtitle("Cells per HTO Category")
+
+suppressWarnings(
+  category_counts_barplot
+)
+```
+
+#### HTO Category Fraction Barplot
+```{r Category Fraction Barplot}
+plot_df <- hto_count_stats
+plot_df$cells_max <- cumsum(plot_df$frac_cells)
+plot_df$cells_min <- data.table::shift(plot_df$cells_max, type = "lag", fill = 0)
+plot_df$reads_max <- cumsum(plot_df$frac_all_aligned_reads)
+plot_df$reads_min <- data.table::shift(plot_df$reads_max, type = "lag", fill = 0)
+
+hto_category_fraction_barplot <- ggplot() +
+  geom_rect(data = plot_df,
+            aes(xmin = reads_min,
+                xmax = reads_max,
+                ymin = 0.6,
+                ymax = 1.4,
+                fill = fill)) +
+  geom_rect(data = plot_df,
+            aes(xmin = cells_min,
+                xmax = cells_max,
+                ymin = 1.6,
+                ymax = 2.4,
+                fill = fill)) +
+  scale_fill_identity() +
+  scale_x_continuous("") +
+  scale_y_continuous("",
+                     breaks = c(1, 2),
+                     labels = c("Fraction of Reads",
+                                "Fraction of Cell Barcodes")) +
+  theme_bw() +
+  ggtitle("Fraction of Cells and Reads per HTO Category")
+
+suppressWarnings(
+  hto_category_fraction_barplot
+)
+```
+
+#### HTO Barcode Count Stats
+```{r HTO Barcode Read UMI Gene Stats}
+singlet_meta <- as.data.table(meta[meta$hto_category == "singlet",])
+
+bc_count_stats <- singlet_meta[, .(n_singlets = nrow(.SD),
+                                   frac_singlets = round(nrow(.SD)/nrow(singlet_meta), 4)),
+                               by = list(pbmc_sample_id,hto_barcode)]
+
+qc_list$pbmc_sample_singlet_stats <- lapply(1:nrow(bc_count_stats),
+                                      function(x) {
+                                        list(hto_barcode = bc_count_stats$hto_barcode[x],
+                                             n_singlets = bc_count_stats$n_singlets[x],
+                                             frac_singlets = bc_count_stats$frac_singlets[x])
+                                      })
+names(qc_list$pbmc_sample_singlet_stats) <- bc_count_stats$pbmc_sample_id
+
+
+qc_table(bc_count_stats)
+```
+
+#### HTO Barcode Counts Barplot
+```{r BC Count Barplot}
+bc_to_plot_bc <- data.frame(hto_barcode = unique(singlet_meta$hto_barcode),
+                            plot_barcode = unique(singlet_meta$plot_barcode))
+
+bc_count_stats <- bc_count_stats[bc_to_plot_bc,
+                                 on = "hto_barcode"]
+
+ggplot() +
+  geom_bar(data = bc_count_stats,
+           aes(x = as.factor(plot_barcode),
+               y = n_singlets),
+           stat = "identity") +
+  geom_hline(aes(yintercept = median(bc_count_stats$n_singlets)),
+             linetype = "dashed") +
+  scale_x_discrete("") +
+  scale_y_continuous("N Cells", 
+                     limits = c(0, 4000)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.3)) +
+  ggtitle("Cells per HTO Barcode")
+```
+
+[Return to Contents](#contents)
+
+<a id="reads"></a>
+
+#### HTO Category Read Stats
+```{r}
+hto_read_stats <- meta[, .(q25 = quantile(n_reads, 0.25),
+                           median = quantile(n_reads, 0.50),
+                           q75 = quantile(n_reads, 0.75)),
+                       by = hto_category]
+hto_read_stats <- hto_read_stats[match(hto_order,hto_read_stats$hto_category),]
+
+for(category in hto_read_stats$hto_category) {
+  qc_list$hto_category_stats[[category]]$mapped_reads_per_cell_q25 <- hto_read_stats$q25[hto_read_stats$hto_category == category]
+  qc_list$hto_category_stats[[category]]$mapped_reads_per_cell_median <- hto_read_stats$median[hto_read_stats$hto_category == category]
+  qc_list$hto_category_stats[[category]]$mapped_reads_per_cell_q75 <- hto_read_stats$q75[hto_read_stats$hto_category == category]
+}
+
+qc_table(hto_read_stats)
+```
+
+#### HTO Barcode Read Stats
+```{r}
+bc_read_stats <- singlet_meta[, .(q25 = quantile(n_reads, 0.25),
+                                  median = quantile(n_reads, 0.50),
+                                  q75 = quantile(n_reads, 0.75)),
+                              by = list(pbmc_sample_id,hto_barcode)]
+
+for(sample_id in bc_read_stats$pbmc_sample_id) {
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_q25 <- bc_read_stats$q25[bc_read_stats$pbmc_sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_median <- bc_read_stats$median[bc_read_stats$pbmc_sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_q75 <- bc_read_stats$q75[bc_read_stats$pbmc_sample_id == sample_id]
+}
+
+qc_table(bc_read_stats)
+```
+
+#### HTO Category/Barcode UMI Reads Plots
+```{r}
+category_reads_violins <- qc_violin_plot(meta,
+                                         category_x = "hto_category",
+                                         name_x = "HTO Category",
+                                         column_y = "n_reads",
+                                         name_y = "N Reads per Cell",
+                                         fill = "dodgerblue")
+
+barcode_reads_violins <- qc_violin_plot(meta[meta$hto_category == "singlet",],
+                                        category_x = "plot_barcode",
+                                        name_x = "HTO Barcode (singlets)",
+                                        column_y = "n_reads",
+                                        name_y = "N Reads per Cell",
+                                        fill = "dodgerblue") +
+  ggtitle("Reads per Cell")
+
+reads_violin_list <- list(category_reads_violins, 
+                          barcode_reads_violins)
+
+suppressWarnings(
+  plot_grid(plotlist = reads_violin_list,
+            ncol = 2, rel_widths = c(1, 3),
+            nrow = 1, align = "h")
+)
+```
+
+[Return to Contents](#contents)
+
+<a id="umis"></a>
+
+#### HTO Category UMI Stats
+```{r}
+hto_umi_stats <- meta[, .(q25 = quantile(n_umis, 0.25),
+                          median = quantile(n_umis, 0.50),
+                          q75 = quantile(n_umis, 0.75)),
+                      by = hto_category]
+hto_umi_stats <- hto_umi_stats[match(hto_order,hto_umi_stats$hto_category),]
+
+for(category in hto_umi_stats$hto_category) {
+  qc_list$hto_category_stats[[category]]$umis_per_cell_q25 <- hto_umi_stats$q25[hto_umi_stats$hto_category == category]
+  qc_list$hto_category_stats[[category]]$umis_per_cell_median <- hto_umi_stats$median[hto_umi_stats$hto_category == category]
+  qc_list$hto_category_stats[[category]]$umis_per_cell_q75 <- hto_umi_stats$q75[hto_umi_stats$hto_category == category]
+}
+
+qc_table(hto_umi_stats)
+```
+
+#### HTO Barcode UMI Stats
+```{r}
+bc_umi_stats <- singlet_meta[, .(q25 = quantile(n_umis, 0.25),
+                                 median = quantile(n_umis, 0.50),
+                                 q75 = quantile(n_umis, 0.75)),
+                             by = list(pbmc_sample_id,hto_barcode)]
+
+for(sample_id in bc_umi_stats$pbmc_sample_id) {
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_q25 <- bc_umi_stats$q25[bc_umi_stats$pbmc_sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_median <- bc_umi_stats$median[bc_umi_stats$pbmc_sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_q75 <- bc_umi_stats$q75[bc_umi_stats$pbmc_sample_id == sample_id]
+}
+
+qc_table(bc_umi_stats)
+```
+
+#### HTO Category/Barcode UMI Violin Plots
+```{r}
+category_umis_violins <- qc_violin_plot(meta,
+                                        category_x = "hto_category",
+                                        name_x = "HTO Category",
+                                        column_y = "n_umis",
+                                        name_y = "N UMIs per Cell",
+                                        fill = "purple")
+
+barcode_umis_violins <- qc_violin_plot(meta[meta$hto_category == "singlet",],
+                                       category_x = "plot_barcode",
+                                       name_x = "HTO Barcode (singlets)",
+                                       column_y = "n_umis",
+                                       name_y = "N UMIs per Cell",
+                                       fill = "purple") +
+  ggtitle("UMIs per Cell")
+
+umis_violin_list <- list(category_umis_violins, 
+                         barcode_umis_violins)
+
+suppressWarnings(
+  plot_grid(plotlist = umis_violin_list,
+            ncol = 2, rel_widths = c(1, 3),
+            nrow = 1, align = "h")
+)
+```
+
+[Return to Contents](#contents)
+
+<a id="genes"></a>
+
+#### HTO Category Gene Stats
+```{r}
+hto_gene_stats <- meta[, .(q25 = quantile(n_genes, 0.25),
+                           median = quantile(n_genes, 0.50),
+                           q75 = quantile(n_genes, 0.75)),
+                       by = hto_category]
+hto_gene_stats <- hto_gene_stats[match(hto_order,hto_gene_stats$hto_category),]
+
+for(category in hto_gene_stats$hto_category) {
+  qc_list$hto_category_stats[[category]]$genes_per_cell_q25 <- hto_gene_stats$q25[hto_gene_stats$hto_category == category]
+  qc_list$hto_category_stats[[category]]$genes_per_cell_median <- hto_gene_stats$median[hto_gene_stats$hto_category == category]
+  qc_list$hto_category_stats[[category]]$genes_per_cell_q75 <- hto_gene_stats$q75[hto_gene_stats$hto_category == category]
+}
+
+qc_table(hto_gene_stats)
+```
+
+#### HTO Barcode Gene Stats
+```{r}
+bc_gene_stats <- singlet_meta[, .(q25 = quantile(n_genes, 0.25),
+                                  median = quantile(n_genes, 0.50),
+                                  q75 = quantile(n_genes, 0.75)),
+                              by = list(pbmc_sample_id,hto_barcode)]
+
+for(sample_id in bc_gene_stats$pbmc_sample_id) {
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_q25 <- bc_gene_stats$q25[bc_gene_stats$pbmc_sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_median <- bc_gene_stats$median[bc_gene_stats$pbmc_sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_q75 <- bc_gene_stats$q75[bc_gene_stats$pbmc_sample_id == sample_id]
+}
+
+qc_table(bc_gene_stats)
+```
+
+#### HTO Category/Barcode Gene Violin Plots
+```{r}
+category_genes_violins <- qc_violin_plot(meta,
+                                         category_x = "hto_category",
+                                         name_x = "HTO Category",
+                                         column_y = "n_genes",
+                                         name_y = "N Genes per Cell",
+                                         fill = "orangered")
+
+barcode_genes_violins <- qc_violin_plot(meta[meta$hto_category == "singlet",],
+                                        category_x = "plot_barcode",
+                                        name_x = "HTO Barcode (singlets)",
+                                        column_y = "n_genes",
+                                        name_y = "N Genes per Cell",
+                                        fill = "orangered") +
+  ggtitle("Genes per Cell")
+
+genes_violin_list <- list(category_genes_violins, 
+                          barcode_genes_violins)
+
+suppressWarnings(
+  plot_grid(plotlist = genes_violin_list,
+            ncol = 2, rel_widths = c(1, 3),
+            nrow = 1, align = "h")
+)
+```
+
+[Return to Contents](#contents)
+
+<a id="json_out"></a>
+
+### Write QC JSON
+
+```{r Save QC JSON}
+stm(paste0("Writing JSON to ", out_json))
+
+qc_list_json <- jsonlite::toJSON(qc_list,
+                                 auto_unbox = TRUE,
+                                 pretty = TRUE)
+
+writeLines(qc_list_json,
+           out_json)
+```
+
+[Return to Contents](#contents)
+
+<a id="session_info"></a>
+
+## Session Information
+
+```{r Session Info}
+sessionInfo()
+```
+
+Total time elapsed
+```{r Show Time}
+end_time <- Sys.time()
+diff_time <- end_time - start_time
+time_message <- paste0("Elapsed Time: ", 
+                       round(diff_time, 3),
+                       " ", units(diff_time))
+print(time_message)
+stm(time_message)
+stm("H5 split process complete.")
+```
+
+[Return to Contents](#contents)

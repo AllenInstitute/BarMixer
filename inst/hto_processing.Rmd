@@ -1,0 +1,522 @@
+---
+title: "Cell Hashing HTO count processing"
+author:
+- Lucas Graybuck
+- Richard Green
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: hide
+    df_print: paged
+    self_contained: true
+params:
+  in_type: "no_params"
+  in_file: NULL
+  in_key: NULL
+  in_well: NULL
+  in_min_cutoff: NULL
+  in_eel: NULL
+  out_dir: NULL
+---
+
+<a id="contents"></a>
+
+## Contents
+
+#### [Data Processing](#data_processing)
+- [Session Preparation](#session_preparation)
+- [Load Inputs](#load_inputs)
+- [Process HTO Data](#process data)
+- [Write Outputs](#data_output)
+
+#### [QC Metrics and Plots](#qc_metrics)
+- [Raw Count Summary](#hash_count_summary)
+- [HTO Count Distributions](#hash_hist_plot)
+- [HTO Category Summary](#cat_summary)
+- [Sample/HTO Singlet Counts](#singlet_counts)
+- [Sample/HTO Singlet Plot](#singlet_plot)
+- [Write QC JSON](#json_out)
+
+#### [Session Info](#session_info)
+
+<a id="data_processing"></a>
+
+## Data Processing
+
+<a id="session_preparation"></a>
+
+### Session Preparation
+
+#### Load libraries:
+```{r Load Libraries}
+start_time <- Sys.time()
+
+quiet_library <- function(...) {
+  suppressPackageStartupMessages(library(...))
+}
+quiet_library(HTOparser)
+quiet_library(H5weaver)
+quiet_library(ggplot2)
+quiet_library(cowplot)
+```
+
+Declaring start
+```{r Declare Start}
+stm("Starting HTO count processing")
+```
+
+#### Argument parsing
+```{r Parse Arguments}
+if(params$in_type == "no_params") {
+  in_type <- "test_cite"
+} else {
+  in_type <- match.arg(params$in_type, choices = c("awk","barcounter","cite","cite-old","test_awk","test_cite"))
+}
+
+if(in_type == "test_awk") {
+  in_type <- "awk"
+  in_file <- system.file("testdata/awk_pipeline_counts_table.csv.gz", package = "HTOparser")
+  in_key  <- system.file("reference/SampleSheet_fallback.csv", package = "HTOparser")
+  in_well <- "X000-HP1C1W1"
+  in_min_cutoff <- 10
+  in_eel <- TRUE
+  out_dir <- tempdir()
+} else if(in_type == "test_cite-old") {
+  in_type <- "cite-old"
+  in_file <- system.file("testdata/CITE-seq_count_matrix.csv.gz", package = "HTOparser")
+  in_key  <- system.file("reference/SampleSheet_fallback.csv", package = "HTOparser")
+  in_well <- "X000-HP1C1W1"
+  in_min_cutoff <- 10
+  in_eel <- TRUE
+  out_dir <- tempdir()
+} else if(in_type == "test_cite") {
+  in_type <- "cite"
+  in_file <- system.file("testdata/CITE-seq-Count_umi_mtx/", package = "HTOparser")
+  in_key <- system.file("reference/SampleSheet_fallback.csv", package = "HTOparser")
+  in_well <- "X000-HP1C1W1"
+  in_min_cutoff <- 10
+  in_eel <- TRUE
+  out_dir <- tempdir()
+} else {
+  in_file <- params$in_file
+  in_key  <- params$in_key
+  in_well <- params$in_well
+  if(is.null(params$in_min_cutoff)) {
+    in_min_cutoff <- "auto"
+  }
+  if(is.null(params$in_eel)) {
+    in_eel <- TRUE
+  } else {
+    in_eel <- as.logical(params$in_eel)
+  }
+  in_min_cutoff <- params$in_min_cutoff
+  out_dir <- params$out_dir
+}
+
+out_mat <- file.path(out_dir, paste0(in_well, "_hto_count_matrix.csv.gz"))
+out_tbl <- file.path(out_dir, paste0(in_well, "_hto_category_table.csv.gz"))
+out_json <- file.path(out_dir, paste0(in_well, "_hto_processing_metrics.json"))
+
+stm(paste0("IN  HTO count type   : ", in_type))
+stm(paste0("IN  HTO count file   : ", in_file))
+stm(paste0("IN  HTO sample sheet : ", in_key))
+stm(paste0("IN  Well             : ", in_well))
+stm(paste0("IN  Min. Cutoff      : ", in_min_cutoff))
+stm(paste0("IN  Expect equal load: ", in_eel))
+stm(paste0("OUT Count matrix     : ", out_mat))
+stm(paste0("OUT Category table   : ", out_tbl))
+stm(paste0("OUT JSON metrics     : ", out_json))
+```
+
+```{r Print arguments}
+print(c(
+  paste0("IN  HTO count type   : ", in_type),
+  paste0("IN  HTO count file   : ", in_file),
+  paste0("IN  HTO sample sheet : ", in_key),
+  paste0("IN  Well             : ", in_well),
+  paste0("IN  Min. Cutoff      : ", in_min_cutoff),
+  paste0("IN  Expect equal load: ", in_eel),
+  paste0("OUT Count matrix     : ", out_mat),
+  paste0("OUT Category table   : ", out_tbl),
+  paste0("OUT JSON metrics     : ", out_json)
+))
+```
+
+[Return to Contents](#contents)
+
+<a id="load_inputs"></a>
+
+### Load Input Datasets
+
+#### HTO reference
+```{r Load HTO Reference, echo = FALSE, results = 'asis'}
+hto_ref <- totalseq_a_human()
+hto_key <- system.file("reference/TotalSeqA_human_hto_key.csv", package = "HTOparser")
+
+qc_table(hto_ref)
+```
+
+#### Read input table/matrix and barcode key
+```{r Read Input Files}
+if(in_type %in% c("awk","cite-old","barcounter")) {
+  in_hto_table <- fread(in_file)
+} else if(in_type == "cite") {
+  in_dir <- file.path(in_file, "umi_count/")
+  in_hto_table <- read_csc_mtx(in_dir)
+  in_hto_table <- in_hto_table[rownames(in_hto_table) != "unmapped",]
+  rownames(in_hto_table) <- sub("-.+","",rownames(in_hto_table))
+}
+in_hto_ss <- fread(in_key, col.names = c("pbmc_sample_id","batch_id","hto_name","pool_id"))
+in_hto_key <- fread(hto_key, header = FALSE, col.names = c("hto_barcode","hto_name"))
+in_hto_key <- in_hto_key[in_hto_ss, on = "hto_name"]
+```
+
+#### Sample Sheet
+```{r}
+qc_table(in_hto_ss)
+```
+
+[Return to Contents](#contents)
+
+<a id="process_data"></a>
+
+### Process HTO Counts
+
+#### Convert input data to matrix
+```{r}
+if(in_type == "awk") {
+  stm("Filtering input HTO table for valid barcodes")
+  names(in_hto_table) <- c("count","cell_barcode","hto_barcode")
+  in_hto_table <- fuzzy_filtering(in_hto_table,
+                                  match_column = "hto_barcode",
+                                  match_values = hto_ref$hto_barcode,
+                                  max_distance = 1)
+  
+  stm("Converting HTO table to matrix")
+  in_hto_mat <- barcode_table_to_matrix(in_hto_table,
+                                        valid_htos = hto_ref$hto_barcode)
+} else if(in_type == "cite-old") {
+  stm("Formatting HTO matrix and filtering for valid barcodes")
+  in_hto_mat <- as.matrix(in_hto_table[,-1])
+  in_hto_mat <- as(in_hto_mat, "dgCMatrix")
+  rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(in_hto_table[[1]], in_hto_key$hto_name)]
+} else if(in_type == "cite") {
+  stm("Formatting HTO matrix and filtering for valid barcodes")
+  in_hto_mat <- as(in_hto_table, "dgCMatrix")
+  rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_table), in_hto_key$hto_name)]
+} else if(in_type == "barcounter") {
+  stm("Formatting HTO matrix and filtering for valid barcodes")
+  keep_cols <- colnames(in_hto_table)[colnames(in_hto_table) %in% in_hto_key$hto_name]
+  in_hto_mat <- t(as.matrix(in_hto_table[, ..keep_cols]))
+  in_hto_mat <- as(in_hto_mat, "dgCMatrix")
+  colnames(in_hto_mat) <- in_hto_table$cell_barcode
+  rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_mat), in_hto_key$hto_name)]
+}
+in_hto_mat <- add_missing_hto_rows(in_hto_mat,
+                                   valid_htos = hto_ref$hto_barcode)
+in_hto_mat <- in_hto_mat[,colSums(in_hto_mat) > 1]
+```
+
+#### Call positive and negative HTOs
+```{r Convert Matrix to Binary Calls}
+stm("Binarizing HTO counts to call positive and negative hashes")
+if(in_min_cutoff == "auto") {
+  binary_results <- binarize_hash_matrix(in_hto_mat,
+                                         valid_htos = hto_ref$hto_barcode,
+                                         use_median_cut = TRUE,
+                                         expect_equal_loading = in_eel)
+} else {
+  binary_results <- binarize_hash_matrix(in_hto_mat,
+                                         valid_htos = hto_ref$hto_barcode,
+                                         use_median_cut = FALSE,
+                                         min_cut = as.numeric(in_min_cutoff),
+                                         expect_equal_loading = in_eel)
+}
+
+```
+
+#### Convert hashes to category calls
+```{r Convert Binary Matrix to Categories}
+stm("Converting binary results to categories")
+category_results <- categorize_binary_hash_matrix(binary_results$bmat)
+```
+
+[Return to Contents](#contents)
+
+<a id="data_output"></a>
+
+### Write Outputs
+
+#### Write count matrix
+```{r Write Count Matrix}
+stm(paste0("Writing count matrix to ", out_mat))
+out_hto_mat <- as(in_hto_mat, "matrix")
+out_hto_mat <- as.data.table(out_hto_mat)
+out_hto_mat <- cbind(data.table(hto_barcode = rownames(in_hto_mat)),
+                     out_hto_mat)
+fwrite(out_hto_mat,
+       file = out_mat)
+```
+
+#### Write category table
+```{r Write Category Table}
+stm(paste0("Writing category table to ", out_tbl))
+
+hto_barcodes_to_pbmc_ids <- function(x,
+                                     bc_key) {
+  x <- as.character(x)
+  res <- character()
+  for(i in seq_along(x)) {
+    bcs <- unlist(strsplit(x[i], ";")[[1]])
+    res[i] <- paste(bc_key$pbmc_sample_id[match(bcs, bc_key$hto_barcode)],
+                    collapse = ";")
+  }
+  res
+}
+
+hash_category_table <- category_results$hash_category_table
+hash_category_table$pbmc_sample_id <- hto_barcodes_to_pbmc_ids(hash_category_table$hto_barcode,
+                                                               in_hto_key)
+
+rownames(hash_category_table) <- NULL
+  
+fwrite(hash_category_table,
+       file = out_tbl)
+```
+
+[Return to Contents](#contents)
+
+<a id="qc_metrics"></a>
+
+## QC Tables and Plots
+
+```{r}
+qc_list <- list(report_type = "hto_processing",
+                report_datetime = as.character(start_time),
+                report_uuid = ids::uuid(use_time = TRUE),
+                package = "HTOparser",
+                package_version = sessionInfo()$otherPkgs$HTOparser$Version,
+                well_id = in_well)
+```
+
+<a id="hash_count_summary"></a>
+
+#### Hash Count Summary
+```{r Print Hash Count Summary, echo = FALSE, results = 'asis'}
+bsummary <- binary_results$bsummary
+bsummary$pbmc_sample_id <- in_hto_key$pbmc_sample_id[match(bsummary$hto_barcode, in_hto_key$hto_barcode)]
+bsummary <- setcolorder(bsummary,
+                        c("pbmc_sample_id","hto_barcode",
+                          "cutoff","n_pos","n_neg","n_below_threshold",
+                          "frac_pos","frac_neg","frac_below_threshold"))
+rownames(bsummary) <- NULL
+
+bsummary$hash_tag <- in_hto_key$hto_name[match(bsummary$hto_barcode, in_hto_key$hto_barcode)]
+
+qc_list$pbmc_sample_hto_stats <- lapply(1:nrow(bsummary),
+                                      function(x) {
+                                        list(hto_barcode = as.character(bsummary$hto_barcode[x]),
+                                             hash_tag = as.character(bsummary$hash_tag[x]),
+                                             cutoff = bsummary$cutoff[x],
+                                             n_pos = bsummary$n_pos[x],
+                                             n_neg = bsummary$n_neg[x],
+                                             n_below_threshold = bsummary$n_below_threshold[x],
+                                             frac_pos = bsummary$frac_pos[x],
+                                             frac_neg = bsummary$frac_neg[x],
+                                             frac_below_threshold = bsummary$frac_below_threshold[x])
+                                      })
+n_no_sample_id <- sum(is.na(bsummary$pbmc_sample_id))
+if(n_no_sample_id > 0) {
+  bsummary$pbmc_sample_id[is.na(bsummary$pbmc_sample_id)] <- paste0("NA_",1:n_no_sample_id)
+}
+names(qc_list$pbmc_sample_hto_stats) <- bsummary$pbmc_sample_id
+
+qc_table(bsummary)
+```
+
+[Return to Contents](#contents)
+
+<a id="hash_hist_plot"></a>
+
+#### Generate plots
+```{r Generate Distribution Plots}
+stm("Generating plots for report")
+plot_list <- lapply(
+  1:nrow(hto_ref),
+  function(x) {
+    barcode <- hto_ref$hto_barcode[x]
+    sample_id <- in_hto_key$pbmc_sample_id[in_hto_key$hto_barcode == barcode]
+    vals <- in_hto_mat[barcode,]
+
+    cutoff <- bsummary$cutoff[bsummary$hto_barcode == barcode]
+    
+    n_vals_below_min_cut <- sum(vals <= 5)
+    vals_above_min_cut <- vals[vals > 5]
+    
+    if(length(vals_above_min_cut) > 0) {
+      
+      val_df <- data.frame(vals = log10(vals_above_min_cut))
+      cut_df <- data.frame(cutoff = log10(cutoff))
+      
+      ggplot() +
+        geom_histogram(data = val_df,
+                     aes(x = vals),
+                     fill = "darkgreen",
+                     binwidth = 0.05) +
+        geom_vline(data = cut_df,
+                   aes(xintercept = cutoff),
+                   size = 1,
+                   color = "dodgerblue") +
+        scale_x_continuous("log10(HTO Count)", 
+                           limits = c(0,5)) +
+        scale_fill_identity() +
+        scale_color_identity() +
+        ggtitle(paste(sample_id, "|", barcode)) +
+        theme_bw(base_size = 8)
+    } else {
+      text_df <- data.frame(x = 2.5,
+                            y = 0.5,
+                            label = "Hash not detected")
+      
+      ggplot() +
+        geom_text(data = text_df,
+                  aes(x = x,
+                      y = y,
+                      label = label)) +
+        scale_x_continuous("log10(HTO Count)", 
+                           limits = c(0,5)) +
+        scale_y_continuous("count",
+                           limits = c(0,1)) +
+        ggtitle(paste(sample_id, "|", barcode)) +
+        theme_bw(base_size = 8)
+    }
+  }
+)
+```
+
+#### Hash Count Distribution Plots
+```{r Display Plots, fig.height = 12, fig.width = 12}
+suppressWarnings(
+  plot_grid(plotlist = plot_list,
+            nrow = ceiling(length(plot_list) / 2),
+            ncol = 2)
+)
+```
+
+[Return to Contents](#contents)
+
+<a id="cat_summary"></a>
+
+#### Hash Category Summary
+```{r Display Category Summary, echo = FALSE, results = 'asis'}
+rownames(category_results$hash_summary) <- NULL
+
+qc_list$hto_category_stats <- lapply(1:nrow(category_results$hash_summary),
+                                      function(x) {
+                                        list(n_cells = category_results$hash_summary$n_category[x],
+                                             frac_cells = category_results$hash_summary$frac_category[x])
+                                      })
+names(qc_list$hto_category_stats) <- category_results$hash_summary$hto_category
+
+qc_table(category_results$hash_summary)
+```
+
+[Return to Contents](#contents)
+
+<a id="singlet_counts"></a>
+
+### Sample/HTO Singlet Counts
+```{r Count Singlets Per Hash}
+singlet_summary <- make_singlet_summary(category_results$hash_category_table,
+                                        valid_htos = hto_ref$hto_barcode)
+singlet_summary$pbmc_sample_id <- in_hto_key$pbmc_sample_id[match(singlet_summary$hto_barcode, in_hto_key$hto_barcode)]
+singlet_summary <- setcolorder(singlet_summary,
+                               c("pbmc_sample_id",
+                                 "hto_barcode",
+                                 "n_singlets",
+                                 "frac_singlets"))
+
+n_no_sample_id <- sum(is.na(singlet_summary$pbmc_sample_id))
+if(n_no_sample_id > 0) {
+  singlet_summary$pbmc_sample_id[is.na(singlet_summary$pbmc_sample_id)] <- paste0("NA_",1:n_no_sample_id)
+}
+
+for(sample_id in singlet_summary$pbmc_sample_id) {
+  qc_list$pbmc_sample_hto_stats[[sample_id]]$n_singlets <- singlet_summary$n_singlets[singlet_summary$pbmc_sample_id == sample_id]
+}
+
+qc_table(singlet_summary)
+```
+
+[Return to Contents](#contents)
+
+<a id="singlet_plot"></a>
+
+### Sample/HTO Singlet Counts Plot
+```{r Plot Singlet Counts}
+singlet_plot_data <- singlet_summary
+singlet_plot_data$x <- 1:nrow(singlet_summary)
+
+ggplot() +
+  geom_rect(data = singlet_plot_data,
+            aes(xmin = x - 0.4, xmax = x + 0.4,
+                ymin = 0, ymax = n_singlets)) +
+  geom_text(data = singlet_plot_data,
+            aes(x = x,
+                y = n_singlets * 1.02,
+                label = n_singlets),
+            vjust = 0,
+            size = 3) +
+  ggtitle("Singlet Counts") +
+  scale_x_continuous("",
+                     breaks = singlet_plot_data$x,
+                     labels = paste0(singlet_plot_data$hto_barcode,
+                                     "\n",
+                                     singlet_plot_data$pbmc_sample_id)) +
+  scale_y_continuous("N Singlets") +
+  theme_bw(base_size = 8) +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.3))
+
+```
+
+[Return to Contents](#contents)
+
+<a id="json_out"></a>
+
+### Write QC JSON
+
+```{r Save QC JSON}
+stm(paste0("Writing JSON to ", out_json))
+qc_list_json <- jsonlite::toJSON(qc_list,
+                                 auto_unbox = TRUE,
+                                 pretty = TRUE)
+writeLines(qc_list_json,
+           out_json)
+```
+
+[Return to Contents](#contents)
+
+<a id="session_info"></a>
+
+## Session Information
+
+```{r Report Session Info}
+sessionInfo()
+```
+
+Total time elapsed
+```{r}
+end_time <- Sys.time()
+diff_time <- end_time - start_time
+time_message <- paste0("Elapsed Time: ", 
+                       round(diff_time, 3),
+                       " ", units(diff_time))
+print(time_message)
+stm(time_message)
+stm("HTO count processing complete.")
+```
+
+[Return to Contents](#contents)
+

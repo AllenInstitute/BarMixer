@@ -1,0 +1,766 @@
+---
+title: "Merge .h5 files by Sample/HTO Barcode"
+author: 
+ - Lucas Graybuck
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    code_folding: hide
+    df_print: paged
+    self_contained: true
+params:
+  in_dir: NULL
+  out_dir: NULL
+---
+
+## Contents
+
+#### [Data Processing](#data_processing)
+- [Session Preparation](#session_preparation)
+- [Identify Inputs](#find_inputs)
+- [Identify Hashes](#find_hashes)
+- [Merge by Hash](#merge_data)
+
+#### [QC Metrics and Plots](#qc_metrics)
+- [Pool-Based QC](#pool_qc)
+- [Well-Based QC](#well_qc)
+  - [Counts, Reads, Genes, and UMIs](#well_overview)
+  - [HTO Category by Well](#well_category_counts)
+  - [HTO Barcodes by Well](#well_barcode_counts)
+- [HTO-Based QC](#hash_qc)
+  - [Counts](#hash_counts)
+  - [Reads](#hash_reads)
+  - [UMIs](#hash_umis)
+  - [Genes](#hash_genes)
+- [Write QC JSON](#json_out)
+
+#### [Session Info](#session_info)
+
+<a id="data_processing"></a>
+
+## Data Processing
+
+<a id="session_preparation"></a>
+
+### Session Preparation
+
+#### Load libraries:
+```{r Load Libraries}
+start_time <- Sys.time()
+
+quiet_library <- function(...) {
+  suppressPackageStartupMessages(library(...))
+}
+quiet_library(rhdf5)
+quiet_library(H5weaver)
+quiet_library(Matrix)
+quiet_library(ggplot2)
+quiet_library(cowplot)
+```
+
+Declaring start
+```{r Declare start}
+stm("Merging .h5 files")
+stm(paste0("Using H5weaver v", installed.packages()["H5weaver","Version"]))
+```
+
+#### Argument parsing
+```{r Parse arguments}
+if(is.null(params$in_dir)) {
+  in_dir <- system.file("testdata/splitdata", package = "H5weaver")
+  out_dir <- tempdir()
+} else {
+  in_dir <- params$in_dir
+  out_dir <- params$out_dir
+}
+
+stm(paste0("IN  H5 directory    : ", in_dir))
+stm(paste0("OUT Directory       : ", out_dir))
+```
+
+```{r Print Arguments}
+print(c(
+  paste0("IN  H5 directory    : ", in_dir),
+  paste0("OUT Directory       : ", out_dir)
+))
+```
+
+[Return to Contents](#contents)
+
+<a id="find_inputs"></a>
+
+#### Locate input files
+```{r Locate inputs}
+in_file_names <- list.files(in_dir, 
+                            pattern = "_.+h5$")
+# Check for per-well directories
+if(length(in_file_names) == 0) {
+  in_file_dirs <- list.dirs(in_dir, 
+                            recursive = FALSE)
+  in_file_names <- unlist(lapply(in_file_dirs,
+                                 list.files, 
+                                 pattern = "_.+h5$"))
+  in_file_paths <- unlist(lapply(in_file_dirs,
+                                 list.files,
+                                 pattern = "_.+h5$", 
+                                 full.names = TRUE))
+} else {
+  in_file_paths <- list.files(in_dir, 
+                              pattern = "_.+h5$", 
+                              full.names = TRUE)
+}
+
+stm(paste0("Found ", length(in_file_paths), " .h5 files for processing"))
+print(paste0("Found ", length(in_file_paths), " .h5 files for processing"))
+```
+
+[Return to Contents](#contents)
+
+<a id="find_hashes"></a>
+
+#### Identify hashes in in_dir
+```{r Identify hashes}
+in_file_hashes <- sub(".h5$","",sub(".+_","",in_file_names))
+unique_hashes <- unique(in_file_hashes)
+
+stm(paste0("Identified ", length(unique_hashes), " hash patterns: ", paste(unique_hashes, collapse = ", ")))
+```
+
+[Return to Contents](#contents)
+
+<a id="merge_data"></a>
+
+#### Merge files based on hashes
+```{r Load Count Matrix}
+meta_list <- list()
+for(i in seq_along(unique_hashes)) {
+  current_hash <- unique_hashes[i]
+
+  stm(paste0("Merging for hash ", current_hash))
+  current_files <- in_file_paths[in_file_hashes == current_hash]
+  for(f in current_files) {
+    if(file.exists(f)) {
+      stm(paste0("IN  H5 file         : ", f))
+    } else {
+      stm(paste0("MISSING  H5 file    : ", f))
+      current_files <- current_files[current_files != f]
+    }
+  }
+  
+  if(length(current_files) > 1) {
+    h5_ll <- lapply(current_files,
+                    h5dump)
+    
+    h5_list <- reduce_h5_list(h5_ll)
+    
+  } else {
+    h5_list <- h5dump(current_files)
+  }
+  
+  meta_list[[current_hash]] <- h5_list_cell_metadata(h5_list)
+  
+  current_pool <- meta_list[[current_hash]]$pool_id[1]
+  
+  if(current_hash == "multiplet") {
+    out_file <- file.path(out_dir, 
+                          paste0(current_pool, "_",
+                                 current_hash, ".h5"))
+    t_out_file <- file.path(out_dir, 
+                            paste0("transposed_",
+                                   current_pool, "_",
+                                   current_hash, ".h5"))
+  } else {
+    current_pbmc_id <- meta_list[[current_hash]]$pbmc_sample_id[1]
+    out_file <- file.path(out_dir, 
+                          paste0(current_pool, "_",
+                                 current_pbmc_id, ".h5"))
+    t_out_file <- file.path(out_dir, 
+                            paste0("transposed_",
+                                   current_pool, "_",
+                                   current_pbmc_id, ".h5"))
+  }
+  
+  stm(paste0("Writing HDF5 to     : ", out_file))
+  
+  write_h5_list(h5_list,
+                out_file,
+                overwrite = TRUE)
+  
+  # transposed version for visualization
+  h5_holdout <- h5_list[!names(h5_list) %in% c("matrix","hash")]
+  h5_list <- h5_list[c("matrix","hash")]
+  
+  h5_list <- h5_list_transpose(h5_list,
+                               sparse_matrices = c("matrix","hash"))
+  
+  for(holdout in names(h5_holdout)) {
+    h5_list[[holdout]] <- h5_holdout[[holdout]]
+  }
+
+  stm(paste0("Writing HDF5 to     : ", t_out_file))
+  
+  write_h5_list(h5_list,
+                t_out_file,
+                overwrite = TRUE)
+}
+
+```
+
+[Return to Contents](#contents)
+
+<a id="qc_metrics"></a>
+
+## QC Metrics
+
+#### Metrics Setup
+```{r Declare Metrics and Plotting}
+stm("Generating QC Metrics and Plots for Report")
+all_meta <- do.call("rbind", meta_list)
+all_meta <- as.data.table(all_meta)
+if("pbmc_sample_id" %in% names(all_meta)) {
+  all_meta$plot_barcode <- paste0(all_meta$hto_barcode,
+                                  "\n",
+                                  all_meta$pbmc_sample_id)
+  
+  hto_barcode_to_pbmc_id <- data.frame(hto_barcode = unique(all_meta$hto_barcode),
+                                       pbmc_sample_id = unique(all_meta$pbmc_sample_id))
+} else {
+  all_meta$pbmc_sample_id <- "No PBMC ID"
+  all_meta$plot_barcode <- all_meta$hto_barcode
+  
+  hto_barcode_to_pbmc_id <- data.frame(pbmc_sample_id = "No PBMC ID",
+                                       hto_barcode = unique(all_meta$hto_barcode))
+}
+
+singlet_meta <- all_meta[hto_category == "singlet"]
+hto_barcode_to_pbmc_id <- as.data.table(hto_barcode_to_pbmc_id)
+
+qc_list <- list(report_type = "merge_h5_by_hash",
+                report_datetime = as.character(start_time),
+                report_uuid = ids::uuid(use_time = TRUE),
+                package = "H5weaver",
+                package_version = sessionInfo()$otherPkgs$H5weaver$Version,
+                pool_id = current_pool)
+
+out_json <- file.path(in_dir, paste0(current_pool, "_merge_h5_metrics.json"))
+stm(paste0("OUT JSON            : ", out_json))
+print(paste0("OUT JSON            : ", out_json))
+```
+
+[Return to Contents](#contents)
+
+<a id="pool_qc"></a>
+
+### Pool-Based QC
+
+#### Counts, Median Reads, UMIs, Genes across all wells
+```{r}
+overview_metrics <- all_meta[,.(n_cells = nrow(.SD),
+                                median_reads = median(n_reads),
+                                median_umis = median(n_umis),
+                                median_genes = median(n_genes))]
+
+qc_list$pool_stats <- as.list(overview_metrics)
+
+qc_table(overview_metrics)
+```
+
+[Return to Contents](#contents)
+
+<a id="pool_category_metrics"></a>
+
+#### Counts, Median Reads, UMIs, Genes by HTO Category
+```{r}
+hto_category_metrics <- all_meta[,.(n_cells = nrow(.SD),
+                                    median_reads = as.numeric(median(n_reads)),
+                                    median_umis = as.numeric(median(n_umis)),
+                                    median_genes = as.numeric(median(n_genes))),
+                                 by = hto_category]
+
+qc_list$hto_category_stats <- lapply(1:nrow(hto_category_metrics),
+                                      function(x) {
+                                        list(n_cells = hto_category_metrics$n_cells[x],
+                                             median_reads = hto_category_metrics$median_reads[x],
+                                             median_umis = hto_category_metrics$median_umis[x],
+                                             median_genes = hto_category_metrics$median_genes[x])
+                                      })
+names(qc_list$hto_category_stats) <- hto_category_metrics$hto_category
+
+qc_table(hto_category_metrics)
+```
+
+[Return to Contents](#contents)
+
+<a id="well_qc"></a>
+
+### Well-Based QC
+
+<a id="well_overview"></a>
+
+#### Counts, Median Reads, UMIs, Genes per well
+```{r}
+well_metrics <- all_meta[,.(n_cells = nrow(.SD),
+                            median_reads = as.numeric(median(n_reads)),
+                            median_umis = as.numeric(median(n_umis)),
+                            median_genes = as.numeric(median(n_genes))),
+                         by = well_id]
+
+for(well in well_metrics$well_id) {
+  qc_list$well_stats[[well]] <- list(n_cells = well_metrics$n_cells[well_metrics$well_id == well],
+                                     median_reads = well_metrics$median_reads[well_metrics$well_id == well],
+                                     median_umis = well_metrics$median_umis[well_metrics$well_id == well],
+                                     median_genes = well_metrics$median_genes[well_metrics$well_id == well])
+}
+
+knitr::kable(well_metrics,
+             caption = "Well Metrics Overview")
+```
+
+#### Reads per Well Plot
+```{r}
+qc_violin_plot(all_meta,
+               category_x = "well_id",
+               name_x = "Well ID",
+               column_y = "n_reads",
+               name_y = "N Reads per Cell",
+               fill = "dodgerblue") +
+  ggtitle("Reads per Cell")
+
+```
+
+#### UMIs per Well Plot
+```{r}
+qc_violin_plot(all_meta,
+               category_x = "well_id",
+               name_x = "Well ID",
+               column_y = "n_umis",
+               name_y = "N UMIs per Cell",
+               fill = "purple") +
+  ggtitle("UMIs per Cell")
+
+```
+
+#### Genes per Well Plot
+```{r}
+qc_violin_plot(all_meta,
+               category_x = "well_id",
+               name_x = "Well ID",
+               column_y = "n_genes",
+               name_y = "N Genes per Cell",
+               fill = "orangered") +
+  ggtitle("Genes per Cell")
+
+```
+
+[Return to Contents](#contents)
+
+<a id="well_category_counts"></a>
+
+### HTO Category Distribution per Well
+
+#### HTO Category Counts Table
+```{r HTO Category Count By Well}
+hto_category_by_well <- all_meta[, 
+                                 .(n_cells = nrow(.SD)),
+                                 by = list(well_id, hto_category)]
+
+hto_category_count_by_well <- dcast(hto_category_by_well,
+                                    formula = hto_category ~ well_id,
+                                    value.var = "n_cells")
+
+for(well in names(hto_category_count_by_well)[-1]) {
+  hto_cat_list <- as.list(hto_category_count_by_well[[well]])
+  names(hto_cat_list) <- paste0("n_",hto_category_count_by_well$hto_category)
+  qc_list$well_stats[[well]] <- c(qc_list$well_stats[[well]], hto_cat_list)
+}
+
+qc_table(hto_category_count_by_well)
+```
+
+#### HTO Category Counts per Well Plot
+```{r HTO Category Count By Well Plot, fig.height = 6, fig.width = 10}
+qc_aligned_barplot(all_meta,
+                   category_x = "well_id",
+                   name_x = "Well ID",
+                   category_y = "hto_category",
+                   category_name = "HTO Category",
+                   colorset_y = "varibow",
+                   name_y = "N Cells",
+                   padding = 0.2) +
+  ggtitle("HTO Category Counts per Well")
+```
+
+#### HTO Category Fraction per Well Table
+```{r HTO Category Fraction By Well}
+hto_category_by_well <- hto_category_by_well[,
+                                             frac_cells := round(n_cells/sum(n_cells),4),
+                                             by = well_id]
+
+hto_category_frac_by_well <- dcast(hto_category_by_well,
+                                   formula = hto_category ~ well_id,
+                                   value.var = "frac_cells")
+
+qc_table(hto_category_frac_by_well)
+```
+
+#### HTO Category Fraction per Well Plot
+```{r HTO Category Fraction By Well Plot, fig.height = 6, fig.width = 10}
+qc_stacked_barplot(all_meta,
+                   category_x = "well_id",
+                   name_x = "Well ID",
+                   category_y = "hto_category",
+                   category_name = "HTO Category",
+                   colorset_y = "varibow",
+                   name_y = "Fraction of Cells",
+                   as_fraction = TRUE) +
+  ggtitle("HTO Category Fraction per Well")
+```
+
+[Return to Contents](#contents)
+
+<a id="well_barcode_counts"></a>
+
+### PBMC Sample/HTO Barcode Distribution per Well
+
+#### HTO Barcode Counts per Well
+```{r HTO Barcode Count By Well}
+hto_barcode_by_well <- singlet_meta[, 
+                                    .(n_cells = nrow(.SD)),
+                                    by = list(well_id, hto_barcode)]
+
+hto_barcode_count_by_well <- dcast(hto_barcode_by_well,
+                                   formula = hto_barcode ~ well_id,
+                                   value.var = "n_cells")
+
+hto_barcode_count_by_well <- hto_barcode_to_pbmc_id[hto_barcode_count_by_well,
+                                                    on = "hto_barcode"]
+
+for(well in names(hto_category_count_by_well)[-1]) {
+  pbmc_sample_list <- as.list(hto_barcode_count_by_well[[well]])
+  names(pbmc_sample_list) <- hto_barcode_count_by_well$pbmc_sample_id
+  qc_list$well_stats[[well]]$pbmc_sample_singlet_counts <- pbmc_sample_list
+}
+
+for(sample_id in hto_barcode_count_by_well$pbmc_sample_id) {
+  sample_row <- hto_barcode_count_by_well[hto_barcode_count_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+  sample_row <- sample_row[,-c(1,2)]
+  
+  qc_list$pbmc_sample_stats[[sample_id]]$well_counts <- as.list(sample_row)
+}
+
+qc_table(hto_barcode_count_by_well)
+```
+
+#### HTO Barcode Counts per Well Plot
+```{r HTO Barcode Count By Well Plot, fig.height = 6, fig.width = 10}
+qc_aligned_barplot(singlet_meta,
+                   category_x = "well_id",
+                   name_x = "Well ID",
+                   category_y = "plot_barcode",
+                   category_name = "HTO Barcode",
+                   colorset_y = "varibow",
+                   name_y = "N Cells",
+                   padding = 0.2) +
+  ggtitle("HTO Barcode Distribution in Wells")
+```
+
+#### Well Counts per HTO Barcode Plot
+```{r Wells by HTO Barcode Count Plot, fig.height = 6, fig.width = 10}
+qc_aligned_barplot(singlet_meta,
+                   category_x = "plot_barcode",
+                   name_x = "HTO Barcode",
+                   category_y = "well_id",
+                   category_name = "Well ID",
+                   colorset_y = "varibow",
+                   name_y = "N Cells",
+                   padding = 0.2) +
+  ggtitle("Well Distribution in HTO Barcodes")
+```
+
+#### HTO Barcode Fraction per Well
+```{r HTO Barcode Fraction By Well}
+hto_barcode_by_well <- hto_barcode_by_well[,
+                                           frac_cells := round(n_cells/sum(n_cells),4),
+                                           by = well_id]
+
+hto_barcode_frac_by_well <- dcast(hto_barcode_by_well,
+                                  formula = hto_barcode ~ well_id,
+                                  value.var = "frac_cells")
+
+hto_barcode_frac_by_well <- hto_barcode_to_pbmc_id[hto_barcode_frac_by_well,
+                                                   on = "hto_barcode"]
+
+qc_table(hto_barcode_frac_by_well)
+```
+
+#### HTO Barcode Fraction per Well Plot
+```{r HTO Barcode Fraction By Well Plot, fig.height = 6, fig.width = 10}
+qc_stacked_barplot(singlet_meta,
+                   category_x = "well_id",
+                   name_x = "Well ID",
+                   category_y = "plot_barcode",
+                   category_name = "HTO Barcode",
+                   colorset_y = "varibow",
+                   name_y = "Fraction of Cells",
+                   as_fraction = TRUE) +
+  ggtitle("HTO Barcode Fraction per Well")
+```
+
+#### Well Fraction per HTO Barcode Plot
+```{r Well Fraction By HTO Barcode Plot, fig.height = 6, fig.width = 10}
+qc_stacked_barplot(singlet_meta,
+                   category_x = "plot_barcode",
+                   category_y = "well_id",
+                   category_name = "Well ID",
+                   name_x = "HTO Barcode",
+                   colorset_y = "varibow",
+                   name_y = "Fraction of Cells",
+                   as_fraction = TRUE) +
+  ggtitle("Well Fraction per HTO Barcode")
+```
+
+[Return to Contents](#contents)
+
+<a id="hash_qc"></a>
+
+### Sample/HTO Barcode QC
+
+<a id="hash_counts"></a>
+
+#### Singlet Counts, Median Reads, UMIs, Genes per HTO Barcode
+```{r}
+hto_barcode_metrics <- singlet_meta[,.(n_cells = nrow(.SD),
+                                       median_reads = as.numeric(median(n_reads)),
+                                       median_umis = as.numeric(median(n_umis)),
+                                       median_genes = as.numeric(median(n_genes))),
+                                    by = hto_barcode]
+
+hto_barcode_metrics <- hto_barcode_to_pbmc_id[hto_barcode_metrics,
+                                              on = "hto_barcode"]
+
+for(sample_id in hto_barcode_metrics$pbmc_sample_id) {
+  sample_row <- hto_barcode_metrics[hto_barcode_metrics$pbmc_sample_id == sample_id, , drop = FALSE]
+  qc_list$pbmc_sample_stats[[sample_id]] <- as.list(sample_row[, -2])
+}
+
+qc_table(hto_barcode_metrics)
+```
+
+[Return to Contents](#contents)
+
+<a id="hash_reads"></a>
+
+#### Reads per HTO Category/Barcode
+```{r}
+category_reads_violins <- qc_violin_plot(all_meta,
+                                         category_x = "hto_category",
+                                         name_x = "HTO Category",
+                                         column_y = "n_reads",
+                                         name_y = "N Reads per Cell",
+                                         fill = "dodgerblue")
+
+barcode_reads_violins <- qc_violin_plot(all_meta[all_meta$hto_category == "singlet",],
+                                        category_x = "plot_barcode",
+                                        name_x = "HTO Barcode (singlets)",
+                                        column_y = "n_reads",
+                                        name_y = "N Reads per Cell",
+                                        fill = "dodgerblue") +
+  ggtitle("Reads per Cell")
+
+reads_violin_list <- list(category_reads_violins, 
+                          barcode_reads_violins)
+
+plot_grid(plotlist = reads_violin_list,
+          ncol = 2, rel_widths = c(1, 3),
+          nrow = 1, align = "h")
+```
+
+
+#### Median Reads per Well By HTO Barcode
+```{r}
+reads_hto_barcode_by_well <- singlet_meta[,
+                                          .(median_reads = median(n_reads)),
+                                          by = list(well_id, hto_barcode)]
+
+reads_hto_barcode_by_well <- dcast(reads_hto_barcode_by_well,
+                                   formula = hto_barcode ~ well_id,
+                                   value.var = "median_reads")
+
+reads_hto_barcode_by_well <- hto_barcode_to_pbmc_id[reads_hto_barcode_by_well,
+                                                    on = "hto_barcode"]
+
+for(well in names(reads_hto_barcode_by_well)[-c(1,2)]) {
+  pbmc_sample_list <- as.list(reads_hto_barcode_by_well[[well]])
+  names(pbmc_sample_list) <- reads_hto_barcode_by_well$pbmc_sample_id
+  
+  qc_list$well_stats[[well]]$pbmc_sample_mapped_reads_median <- pbmc_sample_list
+}
+
+for(sample_id in reads_hto_barcode_by_well$pbmc_sample_id) {
+  sample_row <- reads_hto_barcode_by_well[reads_hto_barcode_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+  sample_row <- sample_row[,-c(1,2)]
+  
+  qc_list$pbmc_sample_stats[[sample_id]]$well_mapped_reads_median <- as.list(sample_row)
+}
+
+qc_table(reads_hto_barcode_by_well)
+```
+
+[Return to Contents](#contents)
+
+<a id="hash_umis"></a>
+
+#### UMIs per HTO Category/Barcode
+```{r}
+category_umis_violins <- qc_violin_plot(all_meta,
+                                        category_x = "hto_category",
+                                        name_x = "HTO Category",
+                                        column_y = "n_umis",
+                                        name_y = "N UMIs per Cell",
+                                        fill = "purple")
+
+barcode_umis_violins <- qc_violin_plot(all_meta[all_meta$hto_category == "singlet",],
+                                       category_x = "plot_barcode",
+                                       name_x = "HTO Barcode (singlets)",
+                                       column_y = "n_umis",
+                                       name_y = "N UMIs per Cell",
+                                       fill = "purple") +
+  ggtitle("UMIs per Cell")
+
+umis_violin_list <- list(category_umis_violins, 
+                         barcode_umis_violins)
+
+plot_grid(plotlist = umis_violin_list,
+          ncol = 2, rel_widths = c(1, 3),
+          nrow = 1, align = "h")
+```
+
+#### Median UMIs per Well By HTO Barcode
+```{r}
+umis_hto_barcode_by_well <- singlet_meta[,
+                                         .(median_umis = median(n_umis)),
+                                         by = list(well_id, hto_barcode)]
+
+umis_hto_barcode_by_well <- dcast(umis_hto_barcode_by_well,
+                                  formula = hto_barcode ~ well_id,
+                                  value.var = "median_umis")
+
+umis_hto_barcode_by_well <- hto_barcode_to_pbmc_id[umis_hto_barcode_by_well,
+                                                   on = "hto_barcode"]
+
+for(well in names(umis_hto_barcode_by_well)[-c(1,2)]) {
+  pbmc_sample_list <- as.list(umis_hto_barcode_by_well[[well]])
+  names(pbmc_sample_list) <- umis_hto_barcode_by_well$pbmc_sample_id
+  
+  qc_list$well_stats[[well]]$pbmc_sample_umis_median <- pbmc_sample_list
+}
+
+for(sample_id in umis_hto_barcode_by_well$pbmc_sample_id) {
+  sample_row <- umis_hto_barcode_by_well[umis_hto_barcode_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+  sample_row <- sample_row[,-c(1,2)]
+  
+  qc_list$pbmc_sample_stats[[sample_id]]$well_umis_median <- as.list(sample_row)
+}
+
+qc_table(umis_hto_barcode_by_well)
+```
+
+[Return to Contents](#contents)
+
+<a id="hash_genes"></a>
+
+#### Genes per HTO Category/Barcode
+```{r}
+category_genes_violins <- qc_violin_plot(all_meta,
+                                         category_x = "hto_category",
+                                         name_x = "HTO Category",
+                                         column_y = "n_genes",
+                                         name_y = "N Genes per Cell",
+                                         fill = "orangered")
+
+barcode_genes_violins <- qc_violin_plot(all_meta[all_meta$hto_category == "singlet",],
+                                        category_x = "plot_barcode",
+                                        name_x = "HTO Barcode (singlets)",
+                                        column_y = "n_genes",
+                                        name_y = "N Genes per Cell",
+                                        fill = "orangered") +
+  ggtitle("Genes per Cell")
+
+genes_violin_list <- list(category_genes_violins, 
+                          barcode_genes_violins)
+
+plot_grid(plotlist = genes_violin_list,
+          ncol = 2, rel_widths = c(1, 3),
+          nrow = 1, align = "h")
+```
+
+#### Median Genes per Well By HTO Barcode
+```{r}
+genes_hto_barcode_by_well <- singlet_meta[,
+                                          .(median_genes = median(n_genes)),
+                                          by = list(well_id, hto_barcode)]
+
+genes_hto_barcode_by_well <- dcast(genes_hto_barcode_by_well,
+                                   formula = hto_barcode ~ well_id,
+                                   value.var = "median_genes")
+
+genes_hto_barcode_by_well <- hto_barcode_to_pbmc_id[genes_hto_barcode_by_well,
+                                                    on = "hto_barcode"]
+
+for(well in names(genes_hto_barcode_by_well)[-c(1,2)]) {
+  pbmc_sample_list <- as.list(genes_hto_barcode_by_well[[well]])
+  names(pbmc_sample_list) <- genes_hto_barcode_by_well$pbmc_sample_id
+  
+  qc_list$well_stats[[well]]$pbmc_sample_genes_median <- pbmc_sample_list
+}
+
+for(sample_id in genes_hto_barcode_by_well$pbmc_sample_id) {
+  sample_row <- genes_hto_barcode_by_well[genes_hto_barcode_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+  sample_row <- sample_row[,-c(1,2)]
+  
+  qc_list$pbmc_sample_stats[[sample_id]]$well_genes_median <- as.list(sample_row)
+}
+
+qc_table(genes_hto_barcode_by_well)
+```
+
+[Return to Contents](#contents)
+
+<a id="json_out"></a>
+
+### Write QC JSON
+
+```{r Save QC JSON}
+stm(paste0("Writing JSON to ", out_json))
+
+qc_list_json <- jsonlite::toJSON(qc_list,
+                                 auto_unbox = TRUE,
+                                 pretty = TRUE)
+
+writeLines(qc_list_json,
+           out_json)
+```
+
+[Return to Contents](#contents)
+
+<a id="session_info"></a>
+
+## Session Information
+
+```{r Session Info}
+sessionInfo()
+```
+
+Total time elapsed
+```{r Show Time}
+end_time <- Sys.time()
+diff_time <- end_time - start_time
+time_message <- paste0("Elapsed Time: ", 
+                       round(diff_time, 3),
+                       " ", units(diff_time))
+print(time_message)
+stm(time_message)
+stm("H5 merge process complete.")
+```
+
+[Return to Contents](#contents)
