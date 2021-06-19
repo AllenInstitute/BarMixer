@@ -66,7 +66,7 @@ stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 #### Argument parsing
 ```{r Parse arguments}
 in_h5 <- params$in_h5
-in_well <- params$in_hto
+in_hto <- params$in_hto
 out_dir <- params$out_dir
 
 stm(paste0("IN  H5 file          : ", in_h5))
