@@ -108,13 +108,13 @@ if(!file.exists(in_mat)) {
   stm(paste0("Found HTO count matrix:", in_mat))
 }
 
-in_cat <- list.files(in_hto, pattern = "hto_category_table", full.names = TRUE)
+in_tbl <- list.files(in_hto, pattern = "hto_category_table", full.names = TRUE)
 
-if(!file.exists(in_cat)) {
-  stm(paste0("ERROR: Cannot find HTO category table:", in_cat))
+if(!file.exists(in_tbl)) {
+  stm(paste0("ERROR: Cannot find HTO category table:", in_tbl))
   stop()
 } else {
-  stm(paste0("Found HTO category table:", in_cat))
+  stm(paste0("Found HTO category table:", in_tbl))
 }
 ```
 
