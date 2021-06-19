@@ -9,9 +9,7 @@ output:
     df_print: paged
     self_contained: true
 params:
-  in_h5: NULL
-  in_mol: NULL
-  in_sum: NULL
+  in_tenx: NULL
   in_key: NULL
   in_well: NULL
   out_dir: NULL
@@ -53,7 +51,7 @@ quiet_library <- function(...) {
   suppressPackageStartupMessages(library(...))
 }
 quiet_library(rhdf5)
-quiet_library(H5weaver)
+quiet_library(BarMixer)
 quiet_library(Matrix)
 quiet_library(ggplot2)
 quiet_library(cowplot)
@@ -63,39 +61,26 @@ quiet_library(jsonlite)
 Declaring start
 ```{r Declare start}
 stm("Starting .h5 metadata analysis")
-stm(paste0("Using H5weaver v", installed.packages()["H5weaver","Version"]))
+stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 ```
 
 #### Argument parsing
 ```{r Parse arguments}
-if(is.null(params$in_h5)) {
-  in_h5 <- system.file("testdata/well1.h5", package = "H5weaver")
-  in_mol <- system.file("testdata/well1_molecule_info.h5", package = "H5weaver")
-  in_sum <- system.file("testdata/well1_metrics_summary.csv", package = "H5weaver")
-  in_key <- system.file("reference/SampleSheet_fallback.csv", package = "H5weaver")
-  in_well <- "B000-P0C0W0"
-  out_dir <- tempdir()
-} else {
-  in_h5 <- params$in_h5
-  in_mol <- params$in_mol
-  in_sum <- params$in_sum
-  in_key <- params$in_key
-  in_well <- params$in_well
-  out_dir <- params$out_dir
-}
-
-in_well <- sub("-.P","-P",in_well)
+in_tenx <- params$in_tenx
+in_key <- params$in_key
+in_well <- params$in_well
+out_dir <- params$out_dir
 
 # Check Well ID format
-if(!grepl("^[A-Z|-]+[0-9]+-.?P[0-9]C[0-9]W[0-9]$", in_well)) {
-  stm(paste0("ERROR: Input Well ID is not in expected format, e.g. EXP###-AP#C#W# or B###-AP#C#W# :", in_h5))
-  stop()
+if(grepl("^[A-Z|-]+[0-9]+-.?P[0-9]C[0-9]W[0-9]$", in_well)) {
+  in_well <- sub("-.P","-P",in_well)
+  well_type <- "aifi"
+} else {
+  well_type <- "other"
 }
 
-stm(paste0("IN  H5 file         : ", in_h5))
-stm(paste0("IN  Mol Info H5     : ", in_mol))
-stm(paste0("IN  Metrics Summary : ", in_sum))
-stm(paste0("IN  SampleSheet     : ", in_key))
+stm(paste0("IN  10x outs/       : ", in_tenx))
+stm(paste0("IN  SampleSheet.csv : ", in_key))
 stm(paste0("IN  Well ID         : ", in_well))
 stm(paste0("OUT H5 directory    : ", out_dir))
 ```
@@ -103,10 +88,8 @@ stm(paste0("OUT H5 directory    : ", out_dir))
 #### Input Parameters
 ```{r Print Arguments}
 print(c(
-  paste0("IN  H5 file         : ", in_h5),
-  paste0("IN  Mol Info H5     : ", in_mol),
-  paste0("IN  Metrics Summary : ", in_sum),
-  paste0("IN  SampleSheet     : ", in_key),
+  paste0("IN  10x outs/       : ", in_tenx),
+  paste0("IN  SampleSheet.csv : ", in_key),
   paste0("IN  Well ID         : ", in_well),
   paste0("OUT H5 directory    : ", out_dir)
 ))
@@ -114,18 +97,34 @@ print(c(
 
 #### Check Input Files
 ```{r Check Inputs}
+
+in_h5 <- file.path(in_tenx, "filtered_feature_bc_matrix.h5")
+
 if(!file.exists(in_h5)) {
   stm(paste0("ERROR: Cannot find IN H5 file:", in_h5))
   stop()
+} else {
+  stm(paste0("Found matrix file:", in_h5))
 }
+
+in_mol <- file.path(in_tenx, "molecule_info.h5")
+
 if(!file.exists(in_mol)) {
   stm(paste0("ERROR: Cannot find IN Mol Info H5 file:", in_mol))
   stop()
+} else {
+  stm(paste0("Found mol_info file:", in_mol))
 }
+
+in_sum <- file.path(in_tenx, "metrics_summary.csv")
+
 if(!file.exists(in_sum)) {
   stm(paste0("ERROR: Cannot find IN Metrics Summary file:", in_sum))
   stop()
+} else {
+  stm(paste0("Found metrics file:", in_sum))
 }
+
 if(!file.exists(in_key)) {
   stm(paste0("ERROR: Cannot find IN SampleSheet file:", in_key))
   stop()
@@ -159,27 +158,8 @@ h5_list <- h5dump(in_h5)
 stm(paste0("Reading SampleSheet from ",in_key))
 ss <- read.csv(in_key)
 
-if("HashTag" %in% names(ss)) {
-  out_h5 <- file.path(out_dir, paste0(in_well, ".h5"))
-  out_json <- sub(".h5$","_well_metrics.json",out_h5)
-
-} else if("WellID" %in% names(ss)) {
-  pool_id <- sub("C.+","", in_well)
-  pool_id <- sub("-[A|H|R]P","-P", pool_id)
-  
-  ss$WellID <- sub("-[A|H|R]P","-P", ss$WellID)
-  
-  pbmc_sample_id <- ss$SampleID[ss$WellID == in_well]
-  
-  n_cells <- length(h5_list$matrix$barcodes)
-  h5_list <- set_list_path(h5_list,
-                           "/matrix/observations/pbmc_sample_id",
-                           rep(pbmc_sample_id, n_cells))
-  
-  out_h5 <- file.path(out_dir, paste0(pool_id, "_", pbmc_sample_id, ".h5"))
-  out_json <- file.path(out_dir, paste0(in_well,"_well_metrics.json"))
-}
-
+out_h5 <- file.path(out_dir, paste0(in_well, ".h5"))
+out_json <- sub(".h5$","_well_metrics.json",out_h5)
 
 stm(paste0("OUT H5 file         : ", out_h5))
 stm(paste0("OUT JSON file       : ", out_json))
@@ -222,48 +202,6 @@ h5_list <- set_list_path(h5_list,
 
 ### Assemble data
 
-#### Split matrices if more than one feature type is present
-
-```{r split_matrices}
-h5_list <- h5_list_convert_to_dgCMatrix(h5_list, target = "matrix")
-
-feature_types <- unique(h5_list$matrix$features$feature_type)
-
-if(sum(feature_types != "Gene Expression") > 0) {
-  stm("Separating non-Gene Expression data to additional matrices")
-  
-  mat <- h5_list$matrix_dgCMatrix
-  
-  feature_df <- as.data.frame(h5_list$matrix$features)
-  
-  h5_list$matrix_dgCMatrix <- mat[feature_df$feature_type == "Gene Expression",]
-  h5_list$matrix$features <- as.list(feature_df[feature_df$feature_type == "Gene Expression",])
-  
-  if("Antibody Capture" %in% feature_types) {
-    h5_list$ADT_dgCMatrix <- mat[feature_df$feature_type == "Antibody Capture",]
-    h5_list$ADT <- list(features = as.list(feature_df[feature_df$feature_type == "Antibody Capture",]))
-    h5_list$ADT$observations <- list(
-      n_umis <- unname(colSums(h5_list$ADT_dgCMatrix))
-    )
-    
-    h5_list <- h5_list_convert_from_dgCMatrix(h5_list, target = "ADT")
-  }
-  
-  if("Peaks" %in% feature_types) {
-    h5_list$peaks_dgCMatrix <- mat[feature_df$feature_type == "Peaks",]
-    h5_list$peaks <- list(features = as.list(feature_df[feature_df$feature_type == "Peaks",]))
-    h5_list$ADT$observations <- list(
-      n_umis <- unname(colSums(h5_list$peaks_dgCMatrix)),
-      n_peaks <- unname(colSums(h5_list$peaks_dgCMatrix > 0))
-    )
-    
-    h5_list <- h5_list_convert_from_dgCMatrix(h5_list, target = "peaks")
-  }
-  
-}
-```
-
-
 #### Compute N UMIs and N Genes per cell
 ```{r n_umi and n_genes}
 stm("Computing UMI and Gene Counts per Cell")
@@ -292,10 +230,13 @@ h5_list <- add_cell_ids(h5_list,
 
 #### Generate Chip, Pool, and Batch IDs based on well_id
 ```{r Chip Pool Batch}
-stm("Adding Batch, Pool, Chip, and Well metadata")
 
-h5_list <- add_well_metadata(h5_list,
+if(well_type == "aifi") {
+  stm("Adding Batch, Pool, Chip, and Well metadata")
+
+  h5_list <- add_well_metadata(h5_list,
                              well_id = in_well)
+}
 ```
 
 #### Add chrM gene counts
@@ -349,7 +290,7 @@ meta <- h5_list_cell_metadata(h5_list)
 qc_list <- list(report_type = "add_tenx_rna_metadata",
                 report_datetime = as.character(start_time),
                 report_uuid = ids::uuid(use_time = TRUE),
-                package = "H5weaver",
+                package = "BarMixer",
                 package_version = sessionInfo()$otherPkgs$H5weaver$Version,
                 well_id = in_well)
 ```
@@ -527,7 +468,6 @@ qc_list_json <- jsonlite::toJSON(qc_list,
 
 writeLines(qc_list_json,
            out_json)
-
 ```
 
 [Return to Contents](#contents)
