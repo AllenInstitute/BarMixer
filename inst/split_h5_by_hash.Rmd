@@ -97,6 +97,7 @@ if(!file.exists(in_h5)) {
   stop()
 } else {
   stm(paste0("Found H5 file:", in_h5))
+  in_well <- sub(".h5$","",basename(in_h5))
 }
 
 in_mat <- list.files(in_hto, pattern = "hto_count_matrix", full.names = TRUE)
