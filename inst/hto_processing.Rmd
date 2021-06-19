@@ -61,6 +61,7 @@ quiet_library(cowplot)
 Declaring start
 ```{r Declare Start}
 stm("Starting HTO count processing")
+stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 ```
 
 #### Argument parsing
@@ -111,6 +112,23 @@ print(c(
 <a id="load_inputs"></a>
 
 ### Load Input Datasets
+
+#### Check Input Files
+```{r Check Inputs}
+if(!file.exists(in_file)) {
+  stm(paste0("ERROR: Cannot find IN Tag_Counts.csv:", in_file))
+  stop()
+} else {
+  stm(paste0("Found Tag Counts file:", in_file))
+}
+
+if(!file.exists(in_key)) {
+  stm(paste0("ERROR: Cannot find IN HTO sample sheet:", in_key))
+  stop()
+} else {
+  stm(paste0("Found HTO sample sheet:", in_key))
+}
+```
 
 #### HTO reference
 ```{r Load HTO Reference, echo = FALSE, results = 'asis'}

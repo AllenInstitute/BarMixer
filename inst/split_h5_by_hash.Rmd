@@ -10,9 +10,7 @@ output:
     self_contained: true
 params:
   in_h5: NULL
-  in_mat: NULL
-  in_mol: NULL
-  in_tbl: NULL
+  in_hto: NULL
   in_well: NULL
   out_dir: NULL
 ---
@@ -37,7 +35,6 @@ params:
 
 #### [Session Info](#session_info)
 
-
 <a id="data_processing"></a>
 
 ## Data Processing
@@ -54,7 +51,7 @@ quiet_library <- function(...) {
   suppressPackageStartupMessages(library(...))
 }
 quiet_library(rhdf5)
-quiet_library(H5weaver)
+quiet_library(BarMixer)
 quiet_library(Matrix)
 quiet_library(ggplot2)
 quiet_library(cowplot)
@@ -63,44 +60,26 @@ quiet_library(cowplot)
 Declaring start
 ```{r Declare start}
 stm("Starting .h5 split")
-stm(paste0("Using H5weaver v", installed.packages()["H5weaver","Version"]))
+stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 ```
 
 #### Argument parsing
 ```{r Parse arguments}
-if(is.null(params$in_h5)) {
-  in_h5 <- system.file("testdata/well1_with_metadata.h5", package = "H5weaver")
-  in_mol <- system.file("testdata/well1_molecule_info.h5", package = "H5weaver")
-  in_mat <- system.file("testdata/well1_count_matrix.csv.gz", package = "H5weaver")
-  in_tbl <- system.file("testdata/well1_category_table.csv.gz", package = "H5weaver")
-  in_well <- "B000-P0C0W0"
-  out_dir <- tempdir()
-} else {
-  in_h5 <- params$in_h5
-  in_mol <- params$in_mol
-  in_mat <- params$in_mat
-  in_tbl <- params$in_tbl
-  in_well <- params$in_well
-  out_dir <- params$out_dir
-}
+in_h5 <- params$in_h5
+in_well <- params$in_hto
+out_dir <- params$out_dir
 
-stm(paste0("IN  H5 file         : ", in_h5))
-stm(paste0("IN  MolInfo(Ignored): ", in_mol))
-stm(paste0("IN  Count matrix    : ", in_mat))
-stm(paste0("IN  Category table  : ", in_tbl))
-stm(paste0("IN  Well ID         : ", in_well))
-stm(paste0("OUT Directory       : ", out_dir))
+stm(paste0("IN  H5 file          : ", in_h5))
+stm(paste0("IN  HTO results path : ", in_hto))
+stm(paste0("OUT Directory        : ", out_dir))
 ```
 
 #### Input Parameters
 ```{r Print Arguments}
 print(c(
-  paste0("IN  H5 file         : ", in_h5),
-  paste0("IN  MolInfo(Ignored): ", in_mol),
-  paste0("IN  Count matrix    : ", in_mat),
-  paste0("IN  Category table  : ", in_tbl),
-  paste0("IN  Well ID         : ", in_well),
-  paste0("OUT Directory       : ", out_dir)
+  paste0("IN  H5 file          : ", in_h5),
+  paste0("IN  HTO results path : ", in_hto),
+  paste0("OUT Directory        : ", out_dir)
 ))
 ```
 
@@ -109,6 +88,35 @@ print(c(
 <a id="load_inputs"></a>
 
 ### Load inputs
+
+#### Check Input Files
+```{r Check Inputs}
+
+if(!file.exists(in_h5)) {
+  stm(paste0("ERROR: Cannot find IN H5 file:", in_h5))
+  stop()
+} else {
+  stm(paste0("Found H5 file:", in_h5))
+}
+
+in_mat <- list.files(in_hto, pattern = "hto_count_matrix", full.names = TRUE)
+
+if(!file.exists(in_mat)) {
+  stm(paste0("ERROR: Cannot find HTO count matrix:", in_mat))
+  stop()
+} else {
+  stm(paste0("Found HTO count matrix:", in_mat))
+}
+
+in_cat <- list.files(in_hto, pattern = "hto_category_table", full.names = TRUE)
+
+if(!file.exists(in_cat)) {
+  stm(paste0("ERROR: Cannot find HTO category table:", in_cat))
+  stop()
+} else {
+  stm(paste0("Found HTO category table:", in_cat))
+}
+```
 
 #### Load HTO counts
 ```{r Load Count Matrix}
@@ -211,7 +219,7 @@ meta <- h5_list_cell_metadata(h5_list)
 qc_list <- list(report_type = "split_h5_by_hash",
                 report_datetime = as.character(start_time),
                 report_uuid = ids::uuid(use_time = TRUE),
-                package = "H5weaver",
+                package = "BarMixer",
                 package_version = sessionInfo()$otherPkgs$H5weaver$Version,
                 well_id = in_well)
 ```
