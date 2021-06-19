@@ -208,11 +208,11 @@ stm("Computing UMI and Gene Counts per Cell")
 
 h5_list <- set_list_path(h5_list,
                          "/matrix/observations/n_umis",
-                         unname(colSums(h5_list$matrix_dgCMatrix)))
+                         unname(Matrix::colSums(h5_list$matrix_dgCMatrix)))
 
 h5_list <- set_list_path(h5_list,
                          "/matrix/observations/n_genes",
-                         unname(colSums(h5_list$matrix_dgCMatrix > 0)))
+                         unname(Matrix::colSums(h5_list$matrix_dgCMatrix > 0)))
 
 h5_list <- h5_list_convert_from_dgCMatrix(h5_list, target = "matrix")
 ```
