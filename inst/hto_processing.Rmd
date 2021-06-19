@@ -71,13 +71,14 @@ in_samples  <- params$in_samples
 in_well <- params$in_well
 if(is.null(params$in_min_cutoff)) {
   in_min_cutoff <- "auto"
+} else {
+  in_min_cutoff <- params$in_min_cutoff
 }
 if(is.null(params$in_eel)) {
   in_eel <- TRUE
 } else {
   in_eel <- as.logical(params$in_eel)
 }
-in_min_cutoff <- params$in_min_cutoff
 out_dir <- params$out_dir
 
 out_mat <- file.path(out_dir, paste0(in_well, "_hto_count_matrix.csv.gz"))
