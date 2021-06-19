@@ -52,7 +52,7 @@ quiet_library <- function(...) {
   suppressPackageStartupMessages(library(...))
 }
 quiet_library(rhdf5)
-quiet_library(H5weaver)
+quiet_library(BarMixer)
 quiet_library(Matrix)
 quiet_library(ggplot2)
 quiet_library(cowplot)
@@ -61,18 +61,13 @@ quiet_library(cowplot)
 Declaring start
 ```{r Declare start}
 stm("Merging .h5 files")
-stm(paste0("Using H5weaver v", installed.packages()["H5weaver","Version"]))
+stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 ```
 
 #### Argument parsing
 ```{r Parse arguments}
-if(is.null(params$in_dir)) {
-  in_dir <- system.file("testdata/splitdata", package = "H5weaver")
-  out_dir <- tempdir()
-} else {
-  in_dir <- params$in_dir
-  out_dir <- params$out_dir
-}
+in_dir <- params$in_dir
+out_dir <- params$out_dir
 
 stm(paste0("IN  H5 directory    : ", in_dir))
 stm(paste0("OUT Directory       : ", out_dir))
@@ -238,8 +233,8 @@ hto_barcode_to_pbmc_id <- as.data.table(hto_barcode_to_pbmc_id)
 qc_list <- list(report_type = "merge_h5_by_hash",
                 report_datetime = as.character(start_time),
                 report_uuid = ids::uuid(use_time = TRUE),
-                package = "H5weaver",
-                package_version = sessionInfo()$otherPkgs$H5weaver$Version,
+                package = "BarMixer",
+                package_version = sessionInfo()$otherPkgs$BarMixer$Version,
                 pool_id = current_pool)
 
 out_json <- file.path(in_dir, paste0(current_pool, "_merge_h5_metrics.json"))

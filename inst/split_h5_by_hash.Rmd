@@ -220,7 +220,7 @@ qc_list <- list(report_type = "split_h5_by_hash",
                 report_datetime = as.character(start_time),
                 report_uuid = ids::uuid(use_time = TRUE),
                 package = "BarMixer",
-                package_version = sessionInfo()$otherPkgs$H5weaver$Version,
+                package_version = sessionInfo()$otherPkgs$BarMixer$Version,
                 well_id = in_well)
 ```
 
