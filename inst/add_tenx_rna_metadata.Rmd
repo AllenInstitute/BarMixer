@@ -10,7 +10,7 @@ output:
     self_contained: true
 params:
   in_tenx: NULL
-  in_key: NULL
+  in_samples: NULL
   in_well: NULL
   out_dir: NULL
 ---
@@ -67,7 +67,7 @@ stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 #### Argument parsing
 ```{r Parse arguments}
 in_tenx <- params$in_tenx
-in_key <- params$in_key
+in_samples <- params$in_samples
 in_well <- params$in_well
 out_dir <- params$out_dir
 
@@ -80,7 +80,7 @@ if(grepl("^[A-Z|-]+[0-9]+-.?P[0-9]C[0-9]W[0-9]$", in_well)) {
 }
 
 stm(paste0("IN  10x outs/       : ", in_tenx))
-stm(paste0("IN  SampleSheet.csv : ", in_key))
+stm(paste0("IN  SampleSheet.csv : ", in_samples))
 stm(paste0("IN  Well ID         : ", in_well))
 stm(paste0("OUT H5 directory    : ", out_dir))
 ```
@@ -89,7 +89,7 @@ stm(paste0("OUT H5 directory    : ", out_dir))
 ```{r Print Arguments}
 print(c(
   paste0("IN  10x outs/       : ", in_tenx),
-  paste0("IN  SampleSheet.csv : ", in_key),
+  paste0("IN  SampleSheet.csv : ", in_samples),
   paste0("IN  Well ID         : ", in_well),
   paste0("OUT H5 directory    : ", out_dir)
 ))
@@ -125,8 +125,8 @@ if(!file.exists(in_sum)) {
   stm(paste0("Found metrics file:", in_sum))
 }
 
-if(!file.exists(in_key)) {
-  stm(paste0("ERROR: Cannot find IN SampleSheet file:", in_key))
+if(!file.exists(in_samples)) {
+  stm(paste0("ERROR: Cannot find IN SampleSheet file:", in_samples))
   stop()
 }
 ```
@@ -155,8 +155,8 @@ h5_list <- h5dump(in_h5)
 
 #### Load SampleSheet
 ```{r Load SampleSheet}
-stm(paste0("Reading SampleSheet from ",in_key))
-ss <- read.csv(in_key)
+stm(paste0("Reading SampleSheet from ",in_samples))
+ss <- read.csv(in_samples)
 
 out_h5 <- file.path(out_dir, paste0(in_well, ".h5"))
 out_json <- sub(".h5$","_well_metrics.json",out_h5)

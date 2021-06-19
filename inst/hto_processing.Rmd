@@ -13,8 +13,8 @@ params:
   in_file: NULL
   in_key: NULL
   in_well: NULL
-  in_min_cutoff: NULL
-  in_eel: NULL
+  in_min_cutoff: "auto"
+  in_eel: "TRUE"
   out_dir: NULL
 ---
 
