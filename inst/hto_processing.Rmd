@@ -11,7 +11,7 @@ output:
     self_contained: true
 params:
   in_file: NULL
-  in_key: NULL
+  in_samples: NULL
   in_well: NULL
   in_min_cutoff: "auto"
   in_eel: "TRUE"
@@ -67,7 +67,7 @@ stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 #### Argument parsing
 ```{r Parse Arguments}
 in_file <- params$in_file
-in_key  <- params$in_key
+in_samples  <- params$in_samples
 in_well <- params$in_well
 if(is.null(params$in_min_cutoff)) {
   in_min_cutoff <- "auto"
@@ -85,7 +85,7 @@ out_tbl <- file.path(out_dir, paste0(in_well, "_hto_category_table.csv.gz"))
 out_json <- file.path(out_dir, paste0(in_well, "_hto_processing_metrics.json"))
 
 stm(paste0("IN  HTO Tag_Counts.csv : ", in_file))
-stm(paste0("IN  HTO sample sheet   : ", in_key))
+stm(paste0("IN  HTO sample sheet   : ", in_samples))
 stm(paste0("IN  Well               : ", in_well))
 stm(paste0("IN  Min. Cutoff        : ", in_min_cutoff))
 stm(paste0("IN  Expect equal load  : ", in_eel))
@@ -97,7 +97,7 @@ stm(paste0("OUT JSON metrics       : ", out_json))
 ```{r Print arguments}
 print(c(
   paste0("IN  Tag_Counts.csv   : ", in_file),
-  paste0("IN  HTO sample sheet : ", in_key),
+  paste0("IN  HTO sample sheet : ", in_samples),
   paste0("IN  Well             : ", in_well),
   paste0("IN  Min. Cutoff      : ", in_min_cutoff),
   paste0("IN  Expect equal load: ", in_eel),
@@ -122,11 +122,11 @@ if(!file.exists(in_file)) {
   stm(paste0("Found Tag Counts file:", in_file))
 }
 
-if(!file.exists(in_key)) {
-  stm(paste0("ERROR: Cannot find IN HTO sample sheet:", in_key))
+if(!file.exists(in_samples)) {
+  stm(paste0("ERROR: Cannot find IN HTO sample sheet:", in_samples))
   stop()
 } else {
-  stm(paste0("Found HTO sample sheet:", in_key))
+  stm(paste0("Found HTO sample sheet:", in_samples))
 }
 ```
 
@@ -142,7 +142,7 @@ qc_table(hto_ref)
 ```{r Read Input Files}
 in_hto_table <- fread(in_file)
 
-in_hto_ss <- fread(in_key, col.names = c("pbmc_sample_id","batch_id","hto_name","pool_id"))
+in_hto_ss <- fread(in_samples, col.names = c("pbmc_sample_id","batch_id","hto_name","pool_id"))
 in_hto_key <- fread(hto_key, header = FALSE, col.names = c("hto_barcode","hto_name"))
 in_hto_key <- in_hto_key[in_hto_ss, on = "hto_name"]
 ```
