@@ -144,7 +144,7 @@ output_h5_files <- file.path(out_dir, paste0(in_well, "_",
                                              c(hto_barcodes,"multiplet"),
                                              ".h5"))
 
-output_messages <- paste0("OUT HDF5            : ", output_h5_files)
+output_messages <- paste0("OUT HDF5             : ", output_h5_files)
 
 for(i in seq_along(output_messages)) {
   stm(output_messages[i])
@@ -174,7 +174,7 @@ h5_list <- h5dump(in_h5)
 
 #### Add hash data to the list object
 ```{r Add Hash Data}
-stm("Adding hash data to cellranger results")
+stm("Adding hash data to HDF5 results")
 
 h5_list <- add_h5_list_hash_results(h5_list,
                                     hash_category_table,

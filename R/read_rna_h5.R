@@ -14,44 +14,44 @@ read_h5_dgCMatrix <- function(h5_file,
                               feature_names = "id",
                               sample_names = "barcodes",
                               index1 = TRUE) {
-
+  
   assertthat::assert_that(is.character(h5_file))
   assertthat::assert_that(length(h5_file) == 1)
-
+  
   assertthat::assert_that(is.character(target))
   assertthat::assert_that(length(target) == 1)
-
+  
   if(grepl("^/",target)) {
     target <- sub("^/","",target)
   }
-
+  
   assertthat::assert_that(is.character(feature_names))
   assertthat::assert_that(length(feature_names) == 1)
-
+  
   assertthat::assert_that(is.character(sample_names))
   assertthat::assert_that(length(sample_names) == 1)
-
+  
   if(!file.exists(h5_file)) {
     stop(paste(h5_file, "does not exist."))
   }
-
+  
   # Make sure the HDF5 file connection is closed if the function
   # exits due to an error.
   on.exit(expr = {
     rhdf5::H5Fclose(h5_handle)
   })
-
+  
   feature_names <- match.arg(arg = feature_names,
                              choices = c("id","name"))
-
+  
   h5_handle <- rhdf5::H5Fopen(h5_file)
-
+  
   if(sample_names == "barcodes") {
     colname_target <- paste0("/", target, "/barcodes")
   } else {
     colname_target <- paste0("/", target, "/observations/", sample_names)
   }
-
+  
   if(index1) {
     mat <- Matrix::sparseMatrix(x = rhdf5::h5read(h5_handle, paste0("/",target,"/data")),
                                 i = rhdf5::h5read(h5_handle, paste0("/",target,"/indices")) + 1,
@@ -73,7 +73,7 @@ read_h5_dgCMatrix <- function(h5_file,
                                 )
     )
   }
-
+  
   mat
 }
 
@@ -87,33 +87,33 @@ read_h5_dgCMatrix <- function(h5_file,
 #'
 read_h5_cell_meta <- function(h5_file,
                               target = "matrix") {
-
+  
   assertthat::assert_that(is.character(h5_file))
   assertthat::assert_that(length(h5_file) == 1)
-
+  
   target <- ifelse(grepl("^/",target),
                    target,
                    paste0("/",target))
-
-  h5_contents <- H5weaver::h5ls(h5_file)
+  
+  h5_contents <- BarMixer::h5ls(h5_file)
   target_contents <- h5_contents[grepl(paste0("^",target), h5_contents$group),]
-
+  
   h5_meta_targets <- character()
-
+  
   target_bcs <- paste0(target, "/barcodes")
-
+  
   if(target_bcs %in% target_contents$full_name) {
     h5_meta_targets <- c(h5_meta_targets,
                          target_bcs)
   }
-
+  
   target_obs <- paste0(target, "/observations")
-
+  
   if(target_obs %in% target_contents$full_name) {
     h5_meta_targets <- c(h5_meta_targets,
                          target_contents$full_name[target_contents$group == target_obs])
   }
-
+  
   if(length(h5_meta_targets) > 0) {
     meta_list <- lapply(h5_meta_targets,
                         function(h5_meta_target) {
@@ -121,15 +121,15 @@ read_h5_cell_meta <- function(h5_file,
                                         h5_meta_target)
                         })
     rhdf5::h5closeAll()
-
+    
     names(meta_list) <- sub(".+/","",h5_meta_targets)
-
+    
     meta_list <- strip_1d_array_recursive(meta_list)
     meta_list <- convert_char_na_recursive(meta_list)
-
+    
     df <- as.data.frame(meta_list,
                         stringsAsFactors = FALSE)
-
+    
     df
   } else {
     stop("No cell metadata found in h5_file.")
@@ -147,27 +147,27 @@ read_h5_feature_meta <- function(h5_file,
                                  target = "matrix") {
   assertthat::assert_that(is.character(h5_file))
   assertthat::assert_that(length(h5_file) == 1)
-
+  
   target <- ifelse(grepl("^/",target),
                    target,
                    paste0("/",target))
-
-  h5_contents <- H5weaver::h5ls(h5_file)
+  
+  h5_contents <- BarMixer::h5ls(h5_file)
   target_contents <- h5_contents[grepl(paste0("^",target), h5_contents$group),]
-
+  
   h5_meta_targets <- character()
-
+  
   target_feat <- paste0(target, "/features")
-
+  
   if(target_feat %in% target_contents$full_name) {
     h5_meta_targets <- c(h5_meta_targets,
                          target_contents$full_name[target_contents$group == target_feat])
   }
-
+  
   h5_meta_names <- sub(".+/","",h5_meta_targets)
   h5_meta_targets <- h5_meta_targets[!grepl("^_",h5_meta_names)]
   h5_meta_names <- h5_meta_names[!grepl("^_",h5_meta_names)]
-
+  
   if(length(h5_meta_targets) > 0) {
     meta_list <- lapply(h5_meta_targets,
                         function(h5_meta_target) {
@@ -175,15 +175,15 @@ read_h5_feature_meta <- function(h5_file,
                                         h5_meta_target)
                         })
     rhdf5::h5closeAll()
-
+    
     names(meta_list) <- h5_meta_names
-
+    
     meta_list <- strip_1d_array_recursive(meta_list)
     meta_list <- convert_char_na_recursive(meta_list)
-
+    
     df <- as.data.frame(meta_list,
                         stringsAsFactors = FALSE)
-
+    
     df
   } else {
     stop("No cell metadata found in h5_file.")
@@ -207,54 +207,54 @@ read_h5_seurat <- function(h5_file,
                            target = "matrix",
                            feature_names = "id",
                            ...) {
-
+  
   if(!requireNamespace("Seurat", versionCheck = list(op = ">=", version = "3.1.0"))) {
     stop("Can't find the Seurat package. Please install with install.packages(\"Seurat\")")
   }
-
+  
   assertthat::assert_that(is.character(h5_file))
   assertthat::assert_that(length(h5_file) == 1)
   assertthat::assert_that(typeof(feature_names) == "character")
   assertthat::assert_that(length(feature_names) == 1)
   assertthat::assert_that(feature_names %in% c("id","name"))
-
+  
   mat <- read_h5_dgCMatrix(h5_file,
                            target = target,
                            feature_names = feature_names)
-
+  
   cell_meta <- read_h5_cell_meta(h5_file,
                                  target = target)
   rownames(cell_meta) <- cell_meta$barcodes
-
+  
   rownames(cell_meta) <- cell_meta$barcodes
-
+  
   feat_meta <- read_h5_feature_meta(h5_file,
                                     target = target)
-
+  
   cite <- FALSE
-
+  
   # Check for CITE-seq data
   if("feature_type" %in% names(feat_meta)) {
     if("Antibody Capture" %in% feat_meta$feature_type) {
       cite <- TRUE
     }
   }
-
+  
   if(cite) {
     cite_feat <- feat_meta[feat_meta$feature_type == "Antibody Capture",]
     feat_meta <- feat_meta[feat_meta$feature_type != "Antibody Capture",]
-
+    
     cite_mat <- mat[cite_feat$id,]
     mat <- mat[feat_meta$id,]
   }
-
+  
   so <- Seurat::CreateSeuratObject(counts = mat,
                                    meta.data = cell_meta,
                                    ...)
   if(cite) {
     so[["ADT"]] <- Seurat::CreateAssayObject(counts = cite_mat)
   }
-
+  
   so
 }
 
@@ -273,54 +273,54 @@ read_h5_seurat <- function(h5_file,
 read_h5_sce <- function(h5_file,
                         target = "matrix",
                         ...) {
-
+  
   if(!requireNamespace("SingleCellExperiment", versionCheck = list(op = ">=", version = "1.8.0"))) {
     stop("Can't find the SingleCellExperiment package. Please install with BiocManater::install(\"SingleCellExperiment\")")
   }
-
+  
   assertthat::assert_that(is.character(h5_file))
   assertthat::assert_that(length(h5_file) == 1)
-
+  
   mat <- read_h5_dgCMatrix(h5_file,
                            target = target)
-
+  
   cell_meta <- read_h5_cell_meta(h5_file,
                                  target = target)
-
+  
   feat_meta <- read_h5_feature_meta(h5_file,
                                     target = target)
-
+  
   cite <- FALSE
-
+  
   # Check for CITE-seq data
   if("feature_type" %in% names(feat_meta)) {
     if("Antibody Capture" %in% feat_meta$feature_type) {
       cite <- TRUE
     }
   }
-
+  
   if(cite) {
     cite_feat <- feat_meta[feat_meta$feature_type == "Antibody Capture",]
     feat_meta <- feat_meta[feat_meta$feature_type != "Antibody Capture",]
-
+    
     cite_mat <- mat[cite_feat$id,]
     mat <- mat[feat_meta$id,]
   }
-
+  
   sce <- SingleCellExperiment::SingleCellExperiment(
     assays = list(counts = mat),
     colData = cell_meta,
     rowData = feat_meta,
     ...
   )
-
+  
   if(cite) {
     cite_se <- SummarizedExperiment::SummarizedExperiment(
       assays = list(counts = cite_mat)
     )
     SingleCellExperiment::altExp(sce, "ADT") <- cite_se
   }
-
+  
   sce
 }
 
@@ -335,12 +335,12 @@ read_h5_sce <- function(h5_file,
 #'
 h5ls <- function(...) {
   df <- rhdf5::h5ls(...)
-
+  
   df$full_name <- paste0(df$group, "/" ,df$name)
   df$full_name <- sub("//","/",df$full_name)
-
+  
   df <- df[,c("full_name","group","name","otype","dclass","dim")]
-
+  
   df
 }
 
@@ -353,16 +353,16 @@ h5ls <- function(...) {
 #' @export
 h5exists <- function(h5_file,
                      target) {
-
+  
   assertthat::assert_that(is.character(h5_file))
   assertthat::assert_that(length(h5_file) == 1)
   assertthat::assert_that(file.exists(h5_file))
-
+  
   assertthat::assert_that(is.character(target))
   assertthat::assert_that(length(target) == 1)
-
-  df <- H5weaver::h5ls(h5_file)
-
+  
+  df <- BarMixer::h5ls(h5_file)
+  
   target %in% df$full_name
 }
 
@@ -375,7 +375,7 @@ h5exists <- function(h5_file,
 #'
 strip_1d_array_recursive <- function(x) {
   assertthat::assert_that(class(x) == "list")
-
+  
   if(length(x) > 0) {
     for(n in seq_along(x)) {
       if(class(x[[n]]) == "list") {
@@ -385,7 +385,7 @@ strip_1d_array_recursive <- function(x) {
       }
     }
   }
-
+  
   x
 }
 
@@ -399,7 +399,7 @@ strip_1d_array_recursive <- function(x) {
 #'
 convert_char_na_recursive <- function(x) {
   assertthat::assert_that(class(x) == "list")
-
+  
   if(length(x) > 0) {
     for(n in seq_along(x)) {
       if(class(x[[n]]) == "list") {
@@ -409,7 +409,7 @@ convert_char_na_recursive <- function(x) {
       }
     }
   }
-
+  
   x
 }
 
@@ -424,11 +424,11 @@ convert_char_na_recursive <- function(x) {
 #' @export
 #'
 h5dump <- function(...) {
-
+  
   h5_list <- rhdf5::h5dump(...)
   h5_list <- strip_1d_array_recursive(h5_list)
   h5_list <- convert_char_na_recursive(h5_list)
-
+  
   h5_list
 }
 
@@ -442,11 +442,11 @@ h5dump <- function(...) {
 #'
 h5dims <- function(h5_file,
                    name) {
-
-  h5_contents <- H5weaver::h5ls(h5_file)
-
+  
+  h5_contents <- BarMixer::h5ls(h5_file)
+  
   d <- h5_contents$dim[h5_contents$full_name == name]
   d <- unlist(strsplit(d, split = ","))
-
+  
   as.numeric(d)
 }

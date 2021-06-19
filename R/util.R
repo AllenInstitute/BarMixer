@@ -7,7 +7,7 @@
 stm <- function(x) {
   assertthat::assert_that(class(x) == "character")
   assertthat::assert_that(length(x) == 1)
-
+  
   write(paste0("[",Sys.time(),"] ",x), stderr())
 }
 
@@ -62,13 +62,13 @@ set_list_path <- function(l,
           names(new_l) <- target
           l <- c(l, new_l)
         }
-
+        
       }
-
-
+      
+      
     }
   }
-
+  
   l
 }
 
@@ -109,7 +109,7 @@ get_list_path <- function(l,
       return(l[[target]])
     }
   }
-
+  
   l
 }
 
@@ -121,19 +121,19 @@ get_list_path <- function(l,
 #' @export
 #'
 h5_list_cell_metadata <- function(h5_list) {
-
+  
   assertthat::assert_that(class(h5_list) == "list")
   assertthat::assert_that("matrix" %in% names(h5_list))
-
+  
   meta <- data.frame(barcodes = h5_list$matrix$barcodes,
                      stringsAsFactors = FALSE)
-
+  
   if("observations" %in% names(h5_list$matrix)) {
     meta <- cbind(meta,
                   as.data.frame(h5_list$matrix$observations,
                                 stringsAsFactors = FALSE))
   }
-
+  
   meta
 }
 
@@ -150,38 +150,38 @@ h5_list_cell_metadata <- function(h5_list) {
 #'
 h5_list_transpose <- function(h5_list,
                               sparse_matrices = "matrix") {
-
+  
   assertthat::assert_that(class(h5_list) == "list")
   assertthat::assert_that(sum(sparse_matrices %in% names(h5_list)) == length(h5_list))
-
+  
   for(mat in sparse_matrices) {
     use_obs <- "observations" %in% names(h5_list[[mat]])
     use_feat <- "features" %in% names(h5_list[[mat]])
-
+    
     if(use_obs) {
       obs <- h5_list[[mat]]$observations
     }
     if(use_feat) {
       feat <- h5_list[[mat]]$features
     }
-    h5_list <- H5weaver::h5_list_convert_to_dgCMatrix(h5_list,
-                                            target = mat)
-
+    h5_list <- BarMixer::h5_list_convert_to_dgCMatrix(h5_list,
+                                                      target = mat)
+    
     sparse_mat <- paste0(mat, "_dgCMatrix")
     h5_list[[sparse_mat]] <- Matrix::t(h5_list[[sparse_mat]])
-
+    
     if(use_obs) {
       h5_list[[mat]]$features <- obs
     }
     if(use_feat) {
       h5_list[[mat]]$observations <- feat[names(feat) != "id"]
     }
-
-    h5_list <- H5weaver::h5_list_convert_from_dgCMatrix(h5_list,
-                                              target = mat)
-
+    
+    h5_list <- BarMixer::h5_list_convert_from_dgCMatrix(h5_list,
+                                                        target = mat)
+    
   }
-
+  
   h5_list
 }
 
@@ -205,7 +205,7 @@ convert_char_na <- function(x) {
 #' @return a data.frame of cellranger run metrics
 #' @export
 read_tenx_metrics <- function(metrics_csv) {
-
+  
   metrics <- read.csv(metrics_csv)
   names(metrics) <- tolower(gsub("\\.","_",names(metrics)))
   metrics <- lapply(metrics,
@@ -214,9 +214,9 @@ read_tenx_metrics <- function(metrics_csv) {
                     })
   metrics <- lapply(metrics,
                     as.numeric)
-
+  
   as.data.frame(metrics)
-
+  
 }
 
 
@@ -230,12 +230,12 @@ read_csc_mtx <- function(csc_dir) {
   mtx_file <- list.files(csc_dir, pattern = "matrix.mtx")
   bc_file <- list.files(csc_dir, pattern = "barcodes.tsv")
   feat_file <- list.files(csc_dir, pattern = "features.tsv")
-
+  
   mat <- Matrix::readMM(file.path(csc_dir,mtx_file))
   mat <- as(mat, "matrix")
   rownames(mat) <- data.table::fread(file.path(csc_dir, feat_file), header = FALSE)[[1]]
   colnames(mat) <- data.table::fread(file.path(csc_dir, bc_file), header = FALSE)[[1]]
-
+  
   mat
 }
 

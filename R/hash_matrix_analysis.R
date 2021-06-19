@@ -29,7 +29,7 @@ select_hash_cutoff <- function(x,
                                min_cut = 10,
                                min_fc = 2,
                                seed = 3030) {
-
+  
   assertthat::assert_that(class(x) == "numeric")
   assertthat::assert_that(class(use_median_cut) == "logical")
   assertthat::assert_that(length(use_median_cut) == 1)
@@ -39,14 +39,14 @@ select_hash_cutoff <- function(x,
   assertthat::assert_that(length(min_fc) == 1)
   assertthat::is.number(seed)
   assertthat::assert_that(length(seed) == 1)
-
+  
   # if no counts for this hash, return a cutoff of 0
   if(sum(x == 0) == length(x)) {
     return(0)
   }
-
+  
   res <- rep(0, length(x))
-
+  
   # if use_median_cut, use the median value to set the min cutoff
   # useful for cases when there are many low values
   # (usually the case for hashing)
@@ -56,44 +56,44 @@ select_hash_cutoff <- function(x,
       min_cut <- 0
     }
   }
-
+  
   x_gt_cut <- x[x > min_cut]
-
+  
   # If no values are greater than the cutoff, return max(x)
   if(length(x_gt_cut) == 0) {
     return(max(x))
   }
-
+  
   # If x appears to be unimodal, set cutoff at mean - 2*sd
   if(is_unimodal(x)) {
     x_gt_cut <- log10(x_gt_cut + 1)
     log_cut <- mean(x_gt_cut) - 2*sd(x_gt_cut)
     res <- floor(10^log_cut)
-
+    
     return(res)
-
+    
   } else {
-
+    
     if(length(x_gt_cut) > 2 & var(x_gt_cut) > 0) {
       set.seed(seed)
       km <- stats::kmeans(log10(x_gt_cut), centers = 2)
       cl <- km$cluster
       high_cl <- which(km$centers == max(km$centers))
       low_cl <- which(km$centers != max(km$centers))
-
+      
       fc <- km$centers[high_cl] - km$centers[low_cl]
       if(fc > log10(min_fc)) {
         res[x > min_cut][cl == high_cl] <- 1
       }
     }
-
+    
     if(sum(res) == 0) {
       max(x)
     } else {
       max(x[res == 0])
     }
   }
-
+  
 }
 
 #' Binarize a vector of hash counts based on a cutoff value
@@ -106,15 +106,15 @@ select_hash_cutoff <- function(x,
 #'
 binarize_hash <- function(x,
                           cutoff) {
-
+  
   assertthat::assert_that(class(x) == "numeric")
   assertthat::is.number(cutoff)
   assertthat::assert_that(length(cutoff) == 1)
-
+  
   res <- rep(0, length(x))
-
+  
   res[x > cutoff] <- 1
-
+  
   res
 }
 
@@ -128,30 +128,30 @@ binarize_hash <- function(x,
 #'
 add_missing_hto_rows <- function(mat,
                                  valid_htos) {
-
+  
   assertthat::assert_that(check_matrix(mat))
   assertthat::assert_that(class(valid_htos) == "character")
-
+  
   if(class(mat) == "dgCMatrix") {
     mat <- as(mat, "matrix")
   }
-
-
+  
+  
   missing_htos <- setdiff(valid_htos, rownames(mat))
   if(length(missing_htos) > 0) {
-
+    
     missing_mat <- matrix(0,
                           nrow = length(missing_htos),
                           ncol = ncol(mat))
     rownames(missing_mat) <- missing_htos
     colnames(missing_mat) <- colnames(mat)
-
+    
     mat <- rbind(mat,
                  missing_mat)
   }
-
+  
   mat <- mat[valid_htos,]
-
+  
   as(mat,"dgCMatrix")
 }
 
@@ -182,70 +182,70 @@ binarize_hash_matrix <- function(mat,
                                  cutoff_vals = NULL,
                                  expect_equal_loading = TRUE,
                                  max_tries = 5) {
-
+  
   assertthat::assert_that(check_matrix(mat))
   assertthat::assert_that(class(expect_equal_loading) == "logical")
   assertthat::assert_that(class(use_median_cut) == "logical")
   assertthat::assert_that(length(use_median_cut) == 1)
-
+  
   if("dgCMatrix" %in% class(mat)) {
     mat <- as(mat, "matrix")
   }
-
+  
   if(!is.null(valid_htos)) {
     assertthat::assert_that(is.character(valid_htos))
     mat <- mat[rownames(mat) %in% valid_htos,]
   } else {
     valid_htos <- rownames(mat)
   }
-
+  
   if(!is.null(cutoff_vals)) {
     assertthat::assert_that(is.numeric(cutoff_vals))
     assertthat::assert_that(names(cutoff_vals) %in% rownames(mat))
     assertthat::assert_that(length(cutoff_vals) == nrow(mat))
-
+    
     cutoff_vals <- cutoff_vals[rownames(mat)]
   } else {
     assertthat::assert_that(class(min_cut) == "numeric")
     assertthat::assert_that(length(min_cut) == 1)
-
+    
     cutoff_vals <- apply(mat,
                          1,
                          select_hash_cutoff,
                          use_median_cut = use_median_cut,
                          min_cut = min_cut)
   }
-
+  
   bmat <- matrix(as.numeric(mat > cutoff_vals),
                  ncol = ncol(mat),
                  nrow = nrow(mat))
   rownames(bmat) <- rownames(mat)
   colnames(bmat) <- colnames(mat)
-
+  
   if(expect_equal_loading) {
     # Try to correct cutoff if one appears overloaded
     # This is likely to occur if one hash has a high background population.
     n_pos <- rowSums(bmat)
-
+    
     tries <- 0
-
+    
     while(max(n_pos) > median(n_pos[n_pos > 0]) * 4 & tries < max_tries) {
       too_high <- which(n_pos == max(n_pos))
       cutoff_vals[too_high] <- select_hash_cutoff(mat[too_high,],
                                                   min_cut = cutoff_vals[too_high])
-
+      
       bmat <- matrix(as.numeric(mat > cutoff_vals),
                      ncol = ncol(mat),
                      nrow = nrow(mat))
       rownames(bmat) <- rownames(mat)
       colnames(bmat) <- colnames(mat)
-
+      
       n_pos <- rowSums(bmat)
-
+      
       tries <- tries + 1
     }
   }
-
+  
   bsummary <- data.frame(hto_barcode = rownames(bmat),
                          cutoff = cutoff_vals,
                          n_pos = rowSums(bmat),
@@ -254,7 +254,7 @@ binarize_hash_matrix <- function(mat,
                          frac_pos = rowSums(bmat) / ncol(bmat),
                          frac_neg = (ncol(bmat) - rowSums(bmat)) / ncol(bmat),
                          frac_below_threshold = rowSums(mat < min_cut) / ncol(bmat))
-
+  
   missing_htos <- setdiff(valid_htos, rownames(bmat))
   if(length(missing_htos) > 0) {
     missing_summary <- data.frame(hto_barcode = missing_htos,
@@ -267,22 +267,22 @@ binarize_hash_matrix <- function(mat,
                                   frac_below_threshold = 0)
     bsummary <- rbind(bsummary,
                       missing_summary)
-
+    
   }
-
+  
   bmat <- add_missing_hto_rows(bmat,
                                valid_htos)
-
+  
   bsummary <- bsummary[match(valid_htos, bsummary$hto_barcode),]
   bsummary$frac_pos <- round(bsummary$frac_pos, 4)
   bsummary$frac_neg <- round(bsummary$frac_neg, 4)
   bsummary$frac_below_threshold <- round(bsummary$frac_below_threshold, 4)
-
+  
   bmat <- bmat[valid_htos,]
-
+  
   list(bmat = as(bmat, "dgCMatrix"),
        bsummary = bsummary)
-
+  
 }
 
 #' Convert binary hash matrix results to categorical labels for each cell barcode
@@ -298,13 +298,13 @@ binarize_hash_matrix <- function(mat,
 #' @export
 #'
 categorize_binary_hash_matrix <- function(bmat) {
-
+  
   assertthat::assert_that(check_matrix(bmat))
-
+  
   if(class(bmat) == "dgCMatrix") {
     bmat <- as(bmat, "matrix")
   }
-
+  
   results <- apply(bmat, 2,
                    function(binary_hash_scores) {
                      hash_sum <- sum(binary_hash_scores)
@@ -326,24 +326,24 @@ categorize_binary_hash_matrix <- function(bmat) {
                      data.frame(hto_category = category,
                                 hto_barcode = sequence)
                    })
-
+  
   hash_category_table <- do.call("rbind",
                                  results)
-
+  
   hash_category_table <- cbind(data.frame(cell_barcode = colnames(bmat)),
                                hash_category_table)
-
+  
   category_count_table <- table(hash_category_table$hto_category)
   hash_summary <- data.frame(hto_category = names(category_count_table),
                              n_category = as.numeric(category_count_table),
                              frac_category = as.numeric(category_count_table) / sum(category_count_table))
-
+  
   missing_summary <- data.frame(hto_category = "missing",
                                 n_category = sum(is.na(hash_category_table$hash_category)),
                                 frac_category = sum(is.na(hash_category_table$hash_category)) / nrow(hash_category_table))
-
+  
   hash_summary <- rbind(hash_summary, missing_summary)
-
+  
   required_categories <- c("no_hash","singlet","doublet","multiplet","missing")
   missing_categories <- setdiff(required_categories, hash_summary$hto_category)
   if(length(missing_categories) > 0) {
@@ -353,11 +353,11 @@ categorize_binary_hash_matrix <- function(bmat) {
     hash_summary <- rbind(hash_summary,
                           zero_summary)
   }
-
+  
   hash_summary <- hash_summary[match(required_categories, hash_summary$hto_category),]
-
+  
   hash_summary$frac_category <- round(hash_summary$frac_category, 4)
-
+  
   list(hash_category_table = hash_category_table,
        hash_summary = hash_summary)
 }
@@ -373,22 +373,22 @@ categorize_binary_hash_matrix <- function(bmat) {
 #'
 make_singlet_summary <- function(hash_category_table,
                                  valid_htos = NULL) {
-
+  
   assertthat::assert_that(class(hash_category_table) == "data.frame")
-
+  
   if(!is.null(valid_htos)) {
     assertthat::assert_that(is.character(valid_htos))
   } else {
     valid_htos <- unique(hash_category_table$hto_barcodes)
   }
-
+  
   hash_category_table <- as.data.table(hash_category_table)
   hash_category_table <- hash_category_table[hash_category_table$hto_category == "singlet",]
-
+  
   singlet_counts <- hash_category_table[,
                                         .(n_singlets = nrow(.SD)),
                                         by = "hto_barcode"]
-
+  
   missing_htos <- setdiff(valid_htos, singlet_counts$hto_barcode)
   if(length(missing_htos) > 0) {
     missing_counts <- data.table(hto_barcode = missing_htos,
@@ -396,11 +396,11 @@ make_singlet_summary <- function(hash_category_table,
     singlet_counts <- rbind(singlet_counts,
                             missing_counts)
   }
-
+  
   singlet_counts$frac_singlets <- round(singlet_counts$n_singlets / sum(singlet_counts$n_singlets), 4)
-
+  
   singlet_counts <- singlet_counts[match(valid_htos, singlet_counts$hto_barcode),]
   singlet_counts <- as.data.frame(singlet_counts)
-
+  
   singlet_counts
 }

@@ -17,8 +17,8 @@ qc_hist_plot <- function(meta,
                          fill = "dodgerblue",
                          target = 2e4,
                          y_max = 2e3) {
-
-
+  
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(column) == "character")
   assertthat::assert_that(length(column) == 1)
@@ -33,13 +33,13 @@ qc_hist_plot <- function(meta,
   assertthat::assert_that(length(target) == 1)
   assertthat::assert_that(class(y_max) == "numeric")
   assertthat::assert_that(length(y_max) == 1)
-
+  
   if(log_x) {
     binwidth <- 0.02
   } else {
     binwidth <- 1e3
   }
-
+  
   p <- ggplot2::ggplot() +
     ggplot2::geom_histogram(ggplot2::aes(x = meta[[column]]),
                             binwidth = binwidth,
@@ -66,7 +66,7 @@ qc_hist_plot <- function(meta,
     ggplot2::scale_fill_identity() +
     ggplot2::scale_y_continuous("N Cells", limits = c(0, y_max)) +
     ggplot2::theme_bw()
-
+  
   if(log_x) {
     p <- p +
       ggplot2::scale_x_log10(paste0("log10(",name_x,")"),
@@ -78,7 +78,7 @@ qc_hist_plot <- function(meta,
                                   limits = c(1e2, 2.5e5),
                                   breaks = c(1e2, 5e2, 1e3, 5e3, 1e4, 5e4, 1e5, 2.5e5))
   }
-
+  
   p
 }
 
@@ -99,8 +99,8 @@ qc_frac_hist_plot <- function(meta,
                               fill = "dodgerblue",
                               target = 0.5,
                               y_max = 2e3) {
-
-
+  
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(column) == "character")
   assertthat::assert_that(length(column) == 1)
@@ -113,9 +113,9 @@ qc_frac_hist_plot <- function(meta,
   assertthat::assert_that(length(target) == 1)
   assertthat::assert_that(class(y_max) == "numeric")
   assertthat::assert_that(length(y_max) == 1)
-
+  
   binwidth <- 0.02
-
+  
   p <- ggplot2::ggplot() +
     ggplot2::geom_histogram(ggplot2::aes(x = meta[[column]]),
                             binwidth = binwidth,
@@ -142,13 +142,13 @@ qc_frac_hist_plot <- function(meta,
     ggplot2::scale_fill_identity() +
     ggplot2::scale_y_continuous("N Cells", limits = c(0, y_max)) +
     ggplot2::theme_bw()
-
-
+  
+  
   p <- p +
     ggplot2::scale_x_continuous(name_x,
                                 limits = c(-.02, 1.02),
                                 breaks = seq(0, 1, by = 0.1))
-
+  
   p
 }
 
@@ -179,7 +179,7 @@ qc_scatter_plot <- function(meta,
                             frac_y = FALSE,
                             show_targets = TRUE,
                             color = "dodgerblue") {
-
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(column_x) == "character")
   assertthat::assert_that(length(column_x) == 1)
@@ -199,15 +199,15 @@ qc_scatter_plot <- function(meta,
   assertthat::assert_that(length(show_targets) == 1)
   assertthat::assert_that(class(color) == "character")
   assertthat::assert_that(length(color) == 1)
-
+  
   target_lines <- data.frame(x = c(1e2, 2e2, 4e2, 8e2),
                              xend = c(2.5e5, 2.5e5, 2.5e5, 2.5e5),
                              y = c(1e2, 1e2, 1e2, 1e2),
                              yend = c(2.5e5, 1.25e5, 6.25e4, 3.125e4),
                              group = c("1:1","1:2","1:4", "1:8"))
-
+  
   p <- ggplot2::ggplot()
-
+  
   if(show_targets) {
     p <- p +
       ggplot2::geom_segment(data = target_lines,
@@ -224,7 +224,7 @@ qc_scatter_plot <- function(meta,
                          vjust = 0,
                          size = 3)
   }
-
+  
   p <- p +
     ggplot2::geom_point(ggplot2::aes(x = meta[[column_x]],
                                      y = meta[[column_y]]),
@@ -233,7 +233,7 @@ qc_scatter_plot <- function(meta,
                         color = color) +
     ggplot2::scale_color_identity() +
     ggplot2::theme_bw()
-
+  
   if(log_x) {
     p <- p +
       ggplot2::scale_x_log10(paste0("log10(",name_x,")"),
@@ -249,7 +249,7 @@ qc_scatter_plot <- function(meta,
     p <- p +
       ggplot2::scale_x_continuous(name_x)
   }
-
+  
   if(log_y) {
     p <- p +
       ggplot2::scale_y_log10(paste0("log10(",name_y,")"),
@@ -265,7 +265,7 @@ qc_scatter_plot <- function(meta,
     p <- p +
       ggplot2::scale_y_continuous(name_y)
   }
-
+  
   p
 }
 
@@ -291,7 +291,7 @@ qc_violin_plot <- function(meta,
                            name_y = "N Reads per Cell",
                            log_y = TRUE,
                            fill = "skyblue") {
-
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(category_x) == "character")
   assertthat::assert_that(length(category_x) == 1)
@@ -307,19 +307,19 @@ qc_violin_plot <- function(meta,
   assertthat::assert_that(length(log_y) == 1)
   assertthat::assert_that(class(fill) == "character")
   assertthat::assert_that(length(fill) == 1)
-
+  
   tidy_x <- rlang::parse_expr(category_x)
   tidy_y <- rlang::parse_expr(column_y)
-
+  
   meta <- as.data.table(meta)
   q_table <- meta[, .(q_25 = stats::quantile(get(column_y), 0.25),
                       q_50 = stats::quantile(get(column_y), 0.50),
                       q_75 = stats::quantile(get(column_y), 0.75)),
                   by = get(category_x)]
   names(q_table)[1] <- category_x
-
+  
   global_median <- stats::median(meta[[column_y]])
-
+  
   p <- ggplot2::ggplot() +
     ggplot2::geom_violin(ggplot2::aes(x = as.factor(meta[[category_x]]),
                                       y = meta[[column_y]]),
@@ -342,8 +342,8 @@ qc_violin_plot <- function(meta,
     ggplot2::theme(axis.text.x = element_text(angle = 90,
                                               hjust = 1,
                                               vjust = 0.3))
-
-
+  
+  
   if(log_y) {
     p <- p +
       ggplot2::scale_y_log10(paste0("log10(",name_y,")"),
@@ -354,9 +354,9 @@ qc_violin_plot <- function(meta,
     p <- p +
       ggplot2::scale_y_continuous(name_y)
   }
-
+  
   p
-
+  
 }
 
 #' Generate a QC Barplot for a metric at multiple cutoffs
@@ -376,7 +376,7 @@ qc_cutoff_barplot <- function(meta,
                               cutoffs = c(500, 750, 1000),
                               max_y = 3e4,
                               fill = "purple") {
-
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(column_x) == "character")
   assertthat::assert_that(length(column_x) == 1)
@@ -387,15 +387,15 @@ qc_cutoff_barplot <- function(meta,
   assertthat::assert_that(length(cutoffs) > 0)
   assertthat::assert_that(class(fill) == "character")
   assertthat::assert_that(length(fill) == 1)
-
+  
   cutoff_counts <- data.frame(cutoff = cutoffs,
                               n_cells = sapply(cutoffs,
                                                function(x) {
                                                  sum(meta[[column_x]] > x)
                                                }))
-
+  
   cutoff_counts <- cutoff_counts[order(cutoff_counts$cutoff),]
-
+  
   ggplot2::ggplot() +
     ggplot2::geom_bar(data = cutoff_counts,
                       ggplot2::aes(x = as.factor(cutoff),
@@ -408,7 +408,7 @@ qc_cutoff_barplot <- function(meta,
                                 expand = c(0, 0)) +
     ggplot2::scale_x_discrete(paste0(name_x, " Cutoff")) +
     ggplot2::theme_bw()
-
+  
 }
 
 #' Generate a stacked barplot for two categorical metrics
@@ -435,7 +435,7 @@ qc_stacked_barplot <- function(meta,
                                colorset_y = "varibow",
                                name_y = "N Cells",
                                as_fraction = FALSE) {
-
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(category_x) == "character")
   assertthat::assert_that(length(category_x) == 1)
@@ -454,19 +454,19 @@ qc_stacked_barplot <- function(meta,
   assertthat::assert_that(colorset_y %in% c("rainbow","varibow"))
   assertthat::assert_that(class(as_fraction) == "logical")
   assertthat::assert_that(length(as_fraction) == 1)
-
-
+  
+  
   meta <- as.data.table(meta)
   count_table <- meta[, .(n_cells = nrow(.SD)),
                       by = mget(c(category_x, category_y))]
-
+  
   plot_xpos <- data.frame(unique(count_table[[category_x]]))
   names(plot_xpos) <- category_x
   plot_xpos <- plot_xpos[order(plot_xpos[[category_x]]),,drop = FALSE]
   plot_xpos$xpos <- 1:nrow(plot_xpos)
-
+  
   count_table <- count_table[plot_xpos, on = category_x]
-
+  
   plot_fills <- data.frame(unique(count_table[[category_y]]))
   names(plot_fills) <- category_y
   if(colorset_y == "rainbow") {
@@ -474,18 +474,18 @@ qc_stacked_barplot <- function(meta,
     plot_fills$fill <- sample(grDevices::rainbow(nrow(plot_fills)), nrow(plot_fills))
   } else if(colorset_y == "varibow") {
     set.seed(3030)
-    plot_fills$fill <- sample(H5weaver::varibow(nrow(plot_fills)), nrow(plot_fills))
+    plot_fills$fill <- sample(BarMixer::varibow(nrow(plot_fills)), nrow(plot_fills))
   }
   plot_fills <- plot_fills[order(plot_fills[[category_y]]),]
-
+  
   count_table <- count_table[plot_fills, on = category_y]
   count_table <- count_table[order(get(category_y), decreasing = TRUE)]
-
+  
   if(as_fraction) {
     count_table <- count_table[, ymax := cumsum(n_cells)/sum(n_cells), by = list(get(category_x))]
     count_table <- count_table[, ymin := shift(ymax, fill = 0, type = "lag"), by = list(get(category_x))]
   }
-
+  
   p <- ggplot2::ggplot() +
     ggplot2::geom_rect(data = count_table,
                        ggplot2::aes(xmin = xpos - 0.4,
@@ -505,7 +505,7 @@ qc_stacked_barplot <- function(meta,
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90,
                                                        hjust = 1,
                                                        vjust = 0.3))
-
+  
   p
 }
 
@@ -534,7 +534,7 @@ qc_aligned_barplot <- function(meta,
                                colorset_y = "varibow",
                                name_y = "N Cells",
                                padding = 0.2) {
-
+  
   assertthat::assert_that(sum(class(meta) %in% c("data.frame","data.table")) > 0)
   assertthat::assert_that(class(category_x) == "character")
   assertthat::assert_that(length(category_x) == 1)
@@ -554,22 +554,22 @@ qc_aligned_barplot <- function(meta,
   assertthat::assert_that(class(padding) == "numeric")
   assertthat::assert_that(length(padding) == 1)
   assertthat::assert_that(padding < 1)
-
-
+  
+  
   tidy_x <- rlang::parse_expr(category_x)
   tidy_y <- rlang::parse_expr(category_y)
-
+  
   meta <- as.data.table(meta)
   count_table <- meta[, .(n_cells = nrow(.SD)),
                       by = mget(c(category_x, category_y))]
-
+  
   plot_xpos <- data.frame(unique(count_table[[category_x]]))
   names(plot_xpos) <- category_x
   plot_xpos <- plot_xpos[order(plot_xpos[[category_x]]),,drop = FALSE]
   plot_xpos$xpos <- 1:nrow(plot_xpos)
-
+  
   count_table <- count_table[plot_xpos, on = category_x]
-
+  
   plot_fills <- data.frame(unique(count_table[[category_y]]))
   names(plot_fills) <- category_y
   if(colorset_y == "rainbow") {
@@ -577,11 +577,11 @@ qc_aligned_barplot <- function(meta,
     plot_fills$fill <- sample(grDevices::rainbow(nrow(plot_fills)), nrow(plot_fills))
   } else if(colorset_y == "varibow") {
     set.seed(3030)
-    plot_fills$fill <- sample(H5weaver::varibow(nrow(plot_fills)), nrow(plot_fills))
+    plot_fills$fill <- sample(BarMixer::varibow(nrow(plot_fills)), nrow(plot_fills))
   }
   plot_fills <- plot_fills[order(plot_fills[[category_y]]),]
   count_table <- count_table[plot_fills, on = category_y]
-
+  
   group_maxes <- count_table[, .(group_max = max(n_cells)), by = list(get(category_y))]
   names(group_maxes)[1] <- category_y
   group_maxes <- group_maxes[order(get(category_y), decreasing = TRUE)]
@@ -590,13 +590,13 @@ qc_aligned_barplot <- function(meta,
   group_maxes <- group_maxes[, padded_center := group_center + (max(cum_max) * (padding/nrow(group_maxes))) * (1:nrow(group_maxes) - 1)]
   group_maxes <- group_maxes[, padded_base := padded_center - group_max/2]
   group_maxes <- group_maxes[, padded_top := padded_center + group_max/2]
-
+  
   count_table <- count_table[group_maxes, on = category_y]
-
+  
   count_table <- count_table[order(get(category_y), decreasing = TRUE)]
   count_table <- count_table[, ymax := cumsum(n_cells), by = list(get(category_x))]
   count_table <- count_table[, ymin := shift(ymax, fill = 0, type = "lag"), by = list(get(category_x))]
-
+  
   p <- ggplot2::ggplot() +
     ggplot2::geom_rect(data = count_table,
                        ggplot2::aes(xmin = xpos - 0.4,
@@ -627,7 +627,7 @@ qc_aligned_barplot <- function(meta,
                    axis.text.x = ggplot2::element_text(angle = 90,
                                                        hjust = 1,
                                                        vjust = 0.3))
-
+  
   p
 }
 
@@ -640,11 +640,11 @@ qc_aligned_barplot <- function(meta,
 #' @export
 #'
 varibow <- function(n_colors) {
-
+  
   assertthat::assert_that(is.numeric(n_colors))
   assertthat::assert_that(n_colors %% 1 == 0)
   assertthat::assert_that(length(n_colors) == 1)
-
+  
   sats <- rep_len(c(0.55, 0.7, 0.85, 1), length.out = n_colors)
   vals <- rep_len(c(1, 0.8, 0.6), length.out = n_colors)
   sub("FF$", "", grDevices::rainbow(n_colors,

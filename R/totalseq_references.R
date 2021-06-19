@@ -10,8 +10,8 @@
 totalseq_a_human <- function() {
   dt <- fread(
     system.file("reference/TotalSeqA_human_barcodes.csv",
-                package = "HTOparser")
-    )
+                package = "BarMixer")
+  )
   dt[order(dt$hto_id),]
 }
 
@@ -25,7 +25,7 @@ totalseq_a_human <- function() {
 totalseq_a_mouse <- function() {
   dt <- fread(
     system.file("reference/TotalSeqA_mouse_barcodes.csv",
-                package = "HTOparser")
+                package = "BarMixer")
   )
   dt[order(dt$hto_id),]
 }
@@ -40,7 +40,7 @@ totalseq_a_mouse <- function() {
 totalseq_a_biotin <- function() {
   dt <- fread(
     system.file("reference/TotalSeqA_biotin_barcodes.csv",
-                package = "HTOparser")
+                package = "BarMixer")
   )
   dt[order(dt$hto_id),]
 }
