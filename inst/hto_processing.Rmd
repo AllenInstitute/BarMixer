@@ -10,7 +10,6 @@ output:
     df_print: paged
     self_contained: true
 params:
-  in_type: "no_params"
   in_file: NULL
   in_key: NULL
   in_well: NULL
@@ -54,8 +53,7 @@ start_time <- Sys.time()
 quiet_library <- function(...) {
   suppressPackageStartupMessages(library(...))
 }
-quiet_library(HTOparser)
-quiet_library(H5weaver)
+quiet_library(BarMixer)
 quiet_library(ggplot2)
 quiet_library(cowplot)
 ```
@@ -67,71 +65,37 @@ stm("Starting HTO count processing")
 
 #### Argument parsing
 ```{r Parse Arguments}
-if(params$in_type == "no_params") {
-  in_type <- "test_cite"
-} else {
-  in_type <- match.arg(params$in_type, choices = c("awk","barcounter","cite","cite-old","test_awk","test_cite"))
+in_file <- params$in_file
+in_key  <- params$in_key
+in_well <- params$in_well
+if(is.null(params$in_min_cutoff)) {
+  in_min_cutoff <- "auto"
 }
-
-if(in_type == "test_awk") {
-  in_type <- "awk"
-  in_file <- system.file("testdata/awk_pipeline_counts_table.csv.gz", package = "HTOparser")
-  in_key  <- system.file("reference/SampleSheet_fallback.csv", package = "HTOparser")
-  in_well <- "X000-HP1C1W1"
-  in_min_cutoff <- 10
+if(is.null(params$in_eel)) {
   in_eel <- TRUE
-  out_dir <- tempdir()
-} else if(in_type == "test_cite-old") {
-  in_type <- "cite-old"
-  in_file <- system.file("testdata/CITE-seq_count_matrix.csv.gz", package = "HTOparser")
-  in_key  <- system.file("reference/SampleSheet_fallback.csv", package = "HTOparser")
-  in_well <- "X000-HP1C1W1"
-  in_min_cutoff <- 10
-  in_eel <- TRUE
-  out_dir <- tempdir()
-} else if(in_type == "test_cite") {
-  in_type <- "cite"
-  in_file <- system.file("testdata/CITE-seq-Count_umi_mtx/", package = "HTOparser")
-  in_key <- system.file("reference/SampleSheet_fallback.csv", package = "HTOparser")
-  in_well <- "X000-HP1C1W1"
-  in_min_cutoff <- 10
-  in_eel <- TRUE
-  out_dir <- tempdir()
 } else {
-  in_file <- params$in_file
-  in_key  <- params$in_key
-  in_well <- params$in_well
-  if(is.null(params$in_min_cutoff)) {
-    in_min_cutoff <- "auto"
-  }
-  if(is.null(params$in_eel)) {
-    in_eel <- TRUE
-  } else {
-    in_eel <- as.logical(params$in_eel)
-  }
-  in_min_cutoff <- params$in_min_cutoff
-  out_dir <- params$out_dir
+  in_eel <- as.logical(params$in_eel)
 }
+in_min_cutoff <- params$in_min_cutoff
+out_dir <- params$out_dir
 
 out_mat <- file.path(out_dir, paste0(in_well, "_hto_count_matrix.csv.gz"))
 out_tbl <- file.path(out_dir, paste0(in_well, "_hto_category_table.csv.gz"))
 out_json <- file.path(out_dir, paste0(in_well, "_hto_processing_metrics.json"))
 
-stm(paste0("IN  HTO count type   : ", in_type))
-stm(paste0("IN  HTO count file   : ", in_file))
-stm(paste0("IN  HTO sample sheet : ", in_key))
-stm(paste0("IN  Well             : ", in_well))
-stm(paste0("IN  Min. Cutoff      : ", in_min_cutoff))
-stm(paste0("IN  Expect equal load: ", in_eel))
-stm(paste0("OUT Count matrix     : ", out_mat))
-stm(paste0("OUT Category table   : ", out_tbl))
-stm(paste0("OUT JSON metrics     : ", out_json))
+stm(paste0("IN  HTO Tag_Counts.csv : ", in_file))
+stm(paste0("IN  HTO sample sheet   : ", in_key))
+stm(paste0("IN  Well               : ", in_well))
+stm(paste0("IN  Min. Cutoff        : ", in_min_cutoff))
+stm(paste0("IN  Expect equal load  : ", in_eel))
+stm(paste0("OUT Count matrix       : ", out_mat))
+stm(paste0("OUT Category table     : ", out_tbl))
+stm(paste0("OUT JSON metrics       : ", out_json))
 ```
 
 ```{r Print arguments}
 print(c(
-  paste0("IN  HTO count type   : ", in_type),
-  paste0("IN  HTO count file   : ", in_file),
+  paste0("IN  Tag_Counts.csv   : ", in_file),
   paste0("IN  HTO sample sheet : ", in_key),
   paste0("IN  Well             : ", in_well),
   paste0("IN  Min. Cutoff      : ", in_min_cutoff),
@@ -158,14 +122,8 @@ qc_table(hto_ref)
 
 #### Read input table/matrix and barcode key
 ```{r Read Input Files}
-if(in_type %in% c("awk","cite-old","barcounter")) {
-  in_hto_table <- fread(in_file)
-} else if(in_type == "cite") {
-  in_dir <- file.path(in_file, "umi_count/")
-  in_hto_table <- read_csc_mtx(in_dir)
-  in_hto_table <- in_hto_table[rownames(in_hto_table) != "unmapped",]
-  rownames(in_hto_table) <- sub("-.+","",rownames(in_hto_table))
-}
+in_hto_table <- fread(in_file)
+
 in_hto_ss <- fread(in_key, col.names = c("pbmc_sample_id","batch_id","hto_name","pool_id"))
 in_hto_key <- fread(hto_key, header = FALSE, col.names = c("hto_barcode","hto_name"))
 in_hto_key <- in_hto_key[in_hto_ss, on = "hto_name"]
@@ -184,34 +142,14 @@ qc_table(in_hto_ss)
 
 #### Convert input data to matrix
 ```{r}
-if(in_type == "awk") {
-  stm("Filtering input HTO table for valid barcodes")
-  names(in_hto_table) <- c("count","cell_barcode","hto_barcode")
-  in_hto_table <- fuzzy_filtering(in_hto_table,
-                                  match_column = "hto_barcode",
-                                  match_values = hto_ref$hto_barcode,
-                                  max_distance = 1)
-  
-  stm("Converting HTO table to matrix")
-  in_hto_mat <- barcode_table_to_matrix(in_hto_table,
-                                        valid_htos = hto_ref$hto_barcode)
-} else if(in_type == "cite-old") {
-  stm("Formatting HTO matrix and filtering for valid barcodes")
-  in_hto_mat <- as.matrix(in_hto_table[,-1])
-  in_hto_mat <- as(in_hto_mat, "dgCMatrix")
-  rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(in_hto_table[[1]], in_hto_key$hto_name)]
-} else if(in_type == "cite") {
-  stm("Formatting HTO matrix and filtering for valid barcodes")
-  in_hto_mat <- as(in_hto_table, "dgCMatrix")
-  rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_table), in_hto_key$hto_name)]
-} else if(in_type == "barcounter") {
-  stm("Formatting HTO matrix and filtering for valid barcodes")
-  keep_cols <- colnames(in_hto_table)[colnames(in_hto_table) %in% in_hto_key$hto_name]
-  in_hto_mat <- t(as.matrix(in_hto_table[, ..keep_cols]))
-  in_hto_mat <- as(in_hto_mat, "dgCMatrix")
-  colnames(in_hto_mat) <- in_hto_table$cell_barcode
-  rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_mat), in_hto_key$hto_name)]
-}
+stm("Formatting HTO matrix and filtering for valid barcodes")
+
+keep_cols <- colnames(in_hto_table)[colnames(in_hto_table) %in% in_hto_key$hto_name]
+in_hto_mat <- t(as.matrix(in_hto_table[, ..keep_cols]))
+in_hto_mat <- as(in_hto_mat, "dgCMatrix")
+colnames(in_hto_mat) <- in_hto_table$cell_barcode
+rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_mat), in_hto_key$hto_name)]
+
 in_hto_mat <- add_missing_hto_rows(in_hto_mat,
                                    valid_htos = hto_ref$hto_barcode)
 in_hto_mat <- in_hto_mat[,colSums(in_hto_mat) > 1]
@@ -232,7 +170,6 @@ if(in_min_cutoff == "auto") {
                                          min_cut = as.numeric(in_min_cutoff),
                                          expect_equal_loading = in_eel)
 }
-
 ```
 
 #### Convert hashes to category calls
