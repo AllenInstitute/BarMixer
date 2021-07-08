@@ -180,25 +180,7 @@ for(i in seq_along(unique_hashes)) {
   write_h5_list(h5_list,
                 out_file,
                 overwrite = TRUE)
-  
-  # transposed version for visualization
-  h5_holdout <- h5_list[!names(h5_list) %in% c("matrix","hash")]
-  h5_list <- h5_list[c("matrix","hash")]
-  
-  h5_list <- h5_list_transpose(h5_list,
-                               sparse_matrices = c("matrix","hash"))
-  
-  for(holdout in names(h5_holdout)) {
-    h5_list[[holdout]] <- h5_holdout[[holdout]]
-  }
-
-  stm(paste0("Writing HDF5 to     : ", t_out_file))
-  
-  write_h5_list(h5_list,
-                t_out_file,
-                overwrite = TRUE)
 }
-
 ```
 
 [Return to Contents](#contents)
