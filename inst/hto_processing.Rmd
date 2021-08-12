@@ -56,6 +56,8 @@ quiet_library <- function(...) {
 quiet_library(BarMixer)
 quiet_library(ggplot2)
 quiet_library(cowplot)
+
+options(stringsAsFactors = FALSE)
 ```
 
 Declaring start
