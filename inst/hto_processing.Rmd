@@ -157,7 +157,7 @@ keep_cols <- colnames(in_hto_table)[colnames(in_hto_table) %in% in_hto_key$hash_
 in_hto_mat <- t(as.matrix(in_hto_table[, ..keep_cols]))
 in_hto_mat <- as(in_hto_mat, "dgCMatrix")
 colnames(in_hto_mat) <- in_hto_table$cell_barcode
-rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_mat), in_hto_key$hash_name)]
+rownames(in_hto_mat) <- in_hto_key$hash_tag[match(rownames(in_hto_mat), in_hto_key$hash_name)]
 
 in_hto_mat <- add_missing_hto_rows(in_hto_mat,
                                    valid_htos = in_hto_key$hash_tag)
