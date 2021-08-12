@@ -56,8 +56,6 @@ quiet_library <- function(...) {
 quiet_library(BarMixer)
 quiet_library(ggplot2)
 quiet_library(cowplot)
-
-options(stringsAsFactors = FALSE)
 ```
 
 Declaring start
@@ -135,7 +133,7 @@ if(!file.exists(in_samples)) {
 
 #### Sample Sheet
 ```{r Load SampleSheet, echo = FALSE, results = 'asis'}
-in_hto_key <- read.csv(in_samples, header = TRUE)
+in_hto_key <- read.csv(in_samples, header = TRUE, stringsAsFactors = FALSE)
 
 qc_table(in_hto_key)
 ```
