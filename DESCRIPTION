@@ -3,10 +3,9 @@ Type: Package
 Title: Hashed scRNA-seq demultiplexing for .h5 files 
 Version: 0.0.1
 Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Maintainer: Lucas Graybuck <lucasg@alleninstitute.org>
+Description: Barcode-based demultiplexing of hashed scRNA-seq datasets
+License: see file LICENSE
 Encoding: UTF-8
 Depends:
   data.table (>= 1.12.6),

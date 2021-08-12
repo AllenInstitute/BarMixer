@@ -86,7 +86,7 @@ out_tbl <- file.path(out_dir, paste0(in_well, "_hto_category_table.csv.gz"))
 out_json <- file.path(out_dir, paste0(in_well, "_hto_processing_metrics.json"))
 
 stm(paste0("IN  HTO Tag_Counts.csv : ", in_file))
-stm(paste0("IN  HTO sample sheet   : ", in_samples))
+stm(paste0("IN  SampleSheet.csv    : ", in_samples))
 stm(paste0("IN  Well               : ", in_well))
 stm(paste0("IN  Min. Cutoff        : ", in_min_cutoff))
 stm(paste0("IN  Expect equal load  : ", in_eel))
@@ -124,33 +124,23 @@ if(!file.exists(in_file)) {
 }
 
 if(!file.exists(in_samples)) {
-  stm(paste0("ERROR: Cannot find IN HTO sample sheet:", in_samples))
+  stm(paste0("ERROR: Cannot find IN SampleSheet.csv:", in_samples))
   stop()
 } else {
-  stm(paste0("Found HTO sample sheet:", in_samples))
+  stm(paste0("Found SampleSheet.csv:", in_samples))
 }
 ```
 
-#### HTO reference
-```{r Load HTO Reference, echo = FALSE, results = 'asis'}
-hto_ref <- totalseq_a_human()
-hto_key <- system.file("reference/TotalSeqA_human_hto_key.csv", package = "HTOparser")
+#### Sample Sheet
+```{r Load SampleSheet, echo = FALSE, results = 'asis'}
+in_hto_key <- read.csv(in_samples, header = TRUE)
 
-qc_table(hto_ref)
+qc_table(in_hto_key)
 ```
 
-#### Read input table/matrix and barcode key
+#### Read input table/matrix 
 ```{r Read Input Files}
 in_hto_table <- fread(in_file)
-
-in_hto_ss <- fread(in_samples, col.names = c("pbmc_sample_id","batch_id","hto_name","pool_id"))
-in_hto_key <- fread(hto_key, header = FALSE, col.names = c("hto_barcode","hto_name"))
-in_hto_key <- in_hto_key[in_hto_ss, on = "hto_name"]
-```
-
-#### Sample Sheet
-```{r}
-qc_table(in_hto_ss)
 ```
 
 [Return to Contents](#contents)
@@ -163,14 +153,14 @@ qc_table(in_hto_ss)
 ```{r}
 stm("Formatting HTO matrix and filtering for valid barcodes")
 
-keep_cols <- colnames(in_hto_table)[colnames(in_hto_table) %in% in_hto_key$hto_name]
+keep_cols <- colnames(in_hto_table)[colnames(in_hto_table) %in% in_hto_key$hash_name]
 in_hto_mat <- t(as.matrix(in_hto_table[, ..keep_cols]))
 in_hto_mat <- as(in_hto_mat, "dgCMatrix")
 colnames(in_hto_mat) <- in_hto_table$cell_barcode
-rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_mat), in_hto_key$hto_name)]
+rownames(in_hto_mat) <- in_hto_key$hto_barcode[match(rownames(in_hto_mat), in_hto_key$hash_name)]
 
 in_hto_mat <- add_missing_hto_rows(in_hto_mat,
-                                   valid_htos = hto_ref$hto_barcode)
+                                   valid_htos = in_hto_key$hash_tag)
 in_hto_mat <- in_hto_mat[,colSums(in_hto_mat) > 1]
 ```
 
@@ -179,12 +169,12 @@ in_hto_mat <- in_hto_mat[,colSums(in_hto_mat) > 1]
 stm("Binarizing HTO counts to call positive and negative hashes")
 if(in_min_cutoff == "auto") {
   binary_results <- binarize_hash_matrix(in_hto_mat,
-                                         valid_htos = hto_ref$hto_barcode,
+                                         valid_htos = in_hto_key$hash_tag,
                                          use_median_cut = TRUE,
                                          expect_equal_loading = in_eel)
 } else {
   binary_results <- binarize_hash_matrix(in_hto_mat,
-                                         valid_htos = hto_ref$hto_barcode,
+                                         valid_htos = in_hto_key$hash_tag,
                                          use_median_cut = FALSE,
                                          min_cut = as.numeric(in_min_cutoff),
                                          expect_equal_loading = in_eel)
@@ -218,24 +208,24 @@ fwrite(out_hto_mat,
 ```{r Write Category Table}
 stm(paste0("Writing category table to ", out_tbl))
 
-hto_barcodes_to_pbmc_ids <- function(x,
-                                     bc_key) {
+hto_barcodes_to_sample_ids <- function(x,
+                                       bc_key) {
   x <- as.character(x)
   res <- character()
   for(i in seq_along(x)) {
     bcs <- unlist(strsplit(x[i], ";")[[1]])
-    res[i] <- paste(bc_key$pbmc_sample_id[match(bcs, bc_key$hto_barcode)],
+    res[i] <- paste(bc_key$sample_id[match(bcs, bc_key$hash_tag)],
                     collapse = ";")
   }
   res
 }
 
 hash_category_table <- category_results$hash_category_table
-hash_category_table$pbmc_sample_id <- hto_barcodes_to_pbmc_ids(hash_category_table$hto_barcode,
-                                                               in_hto_key)
+hash_category_table$sample_id <- hto_barcodes_to_sample_ids(hash_category_table$hto_barcode,
+                                                                 in_hto_key)
 
 rownames(hash_category_table) <- NULL
-  
+
 fwrite(hash_category_table,
        file = out_tbl)
 ```
@@ -260,32 +250,32 @@ qc_list <- list(report_type = "hto_processing",
 #### Hash Count Summary
 ```{r Print Hash Count Summary, echo = FALSE, results = 'asis'}
 bsummary <- binary_results$bsummary
-bsummary$pbmc_sample_id <- in_hto_key$pbmc_sample_id[match(bsummary$hto_barcode, in_hto_key$hto_barcode)]
+bsummary$sample_id <- in_hto_key$sample_id[match(bsummary$hto_barcode, in_hto_key$hash_tag)]
 bsummary <- setcolorder(bsummary,
-                        c("pbmc_sample_id","hto_barcode",
+                        c("sample_id","hto_barcode",
                           "cutoff","n_pos","n_neg","n_below_threshold",
                           "frac_pos","frac_neg","frac_below_threshold"))
 rownames(bsummary) <- NULL
 
-bsummary$hash_tag <- in_hto_key$hto_name[match(bsummary$hto_barcode, in_hto_key$hto_barcode)]
+bsummary$hash_tag <- in_hto_key$hash_name[match(bsummary$hto_barcode, in_hto_key$hash_tag)]
 
-qc_list$pbmc_sample_hto_stats <- lapply(1:nrow(bsummary),
-                                      function(x) {
-                                        list(hto_barcode = as.character(bsummary$hto_barcode[x]),
-                                             hash_tag = as.character(bsummary$hash_tag[x]),
-                                             cutoff = bsummary$cutoff[x],
-                                             n_pos = bsummary$n_pos[x],
-                                             n_neg = bsummary$n_neg[x],
-                                             n_below_threshold = bsummary$n_below_threshold[x],
-                                             frac_pos = bsummary$frac_pos[x],
-                                             frac_neg = bsummary$frac_neg[x],
-                                             frac_below_threshold = bsummary$frac_below_threshold[x])
-                                      })
-n_no_sample_id <- sum(is.na(bsummary$pbmc_sample_id))
+qc_list$sample_hto_stats <- lapply(1:nrow(bsummary),
+                                   function(x) {
+                                     list(hto_barcode = as.character(bsummary$hto_barcode[x]),
+                                          hash_tag = as.character(bsummary$hash_tag[x]),
+                                          cutoff = bsummary$cutoff[x],
+                                          n_pos = bsummary$n_pos[x],
+                                          n_neg = bsummary$n_neg[x],
+                                          n_below_threshold = bsummary$n_below_threshold[x],
+                                          frac_pos = bsummary$frac_pos[x],
+                                          frac_neg = bsummary$frac_neg[x],
+                                          frac_below_threshold = bsummary$frac_below_threshold[x])
+                                   })
+n_no_sample_id <- sum(is.na(bsummary$sample_id))
 if(n_no_sample_id > 0) {
-  bsummary$pbmc_sample_id[is.na(bsummary$pbmc_sample_id)] <- paste0("NA_",1:n_no_sample_id)
+  bsummary$sample_id[is.na(bsummary$sample_id)] <- paste0("NA_",1:n_no_sample_id)
 }
-names(qc_list$pbmc_sample_hto_stats) <- bsummary$pbmc_sample_id
+names(qc_list$sample_hto_stats) <- bsummary$sample_id
 
 qc_table(bsummary)
 ```
@@ -298,12 +288,12 @@ qc_table(bsummary)
 ```{r Generate Distribution Plots}
 stm("Generating plots for report")
 plot_list <- lapply(
-  1:nrow(hto_ref),
+  1:nrow(in_hto_key),
   function(x) {
-    barcode <- hto_ref$hto_barcode[x]
-    sample_id <- in_hto_key$pbmc_sample_id[in_hto_key$hto_barcode == barcode]
+    barcode <- in_hto_key$hash_tag[x]
+    sample_id <- in_hto_key$sample_id[x]
     vals <- in_hto_mat[barcode,]
-
+    
     cutoff <- bsummary$cutoff[bsummary$hto_barcode == barcode]
     
     n_vals_below_min_cut <- sum(vals <= 5)
@@ -316,9 +306,9 @@ plot_list <- lapply(
       
       ggplot() +
         geom_histogram(data = val_df,
-                     aes(x = vals),
-                     fill = "darkgreen",
-                     binwidth = 0.05) +
+                       aes(x = vals),
+                       fill = "darkgreen",
+                       binwidth = 0.05) +
         geom_vline(data = cut_df,
                    aes(xintercept = cutoff),
                    size = 1,
@@ -368,10 +358,10 @@ suppressWarnings(
 rownames(category_results$hash_summary) <- NULL
 
 qc_list$hto_category_stats <- lapply(1:nrow(category_results$hash_summary),
-                                      function(x) {
-                                        list(n_cells = category_results$hash_summary$n_category[x],
-                                             frac_cells = category_results$hash_summary$frac_category[x])
-                                      })
+                                     function(x) {
+                                       list(n_cells = category_results$hash_summary$n_category[x],
+                                            frac_cells = category_results$hash_summary$frac_category[x])
+                                     })
 names(qc_list$hto_category_stats) <- category_results$hash_summary$hto_category
 
 qc_table(category_results$hash_summary)
@@ -384,21 +374,21 @@ qc_table(category_results$hash_summary)
 ### Sample/HTO Singlet Counts
 ```{r Count Singlets Per Hash}
 singlet_summary <- make_singlet_summary(category_results$hash_category_table,
-                                        valid_htos = hto_ref$hto_barcode)
-singlet_summary$pbmc_sample_id <- in_hto_key$pbmc_sample_id[match(singlet_summary$hto_barcode, in_hto_key$hto_barcode)]
+                                        valid_htos = in_hto_key$hash_tag)
+singlet_summary$sample_id <- in_hto_key$sample_id[match(singlet_summary$hto_barcode, in_hto_key$hash_tag)]
 singlet_summary <- setcolorder(singlet_summary,
-                               c("pbmc_sample_id",
+                               c("sample_id",
                                  "hto_barcode",
                                  "n_singlets",
                                  "frac_singlets"))
 
-n_no_sample_id <- sum(is.na(singlet_summary$pbmc_sample_id))
+n_no_sample_id <- sum(is.na(singlet_summary$sample_id))
 if(n_no_sample_id > 0) {
-  singlet_summary$pbmc_sample_id[is.na(singlet_summary$pbmc_sample_id)] <- paste0("NA_",1:n_no_sample_id)
+  singlet_summary$sample_id[is.na(singlet_summary$sample_id)] <- paste0("NA_",1:n_no_sample_id)
 }
 
-for(sample_id in singlet_summary$pbmc_sample_id) {
-  qc_list$pbmc_sample_hto_stats[[sample_id]]$n_singlets <- singlet_summary$n_singlets[singlet_summary$pbmc_sample_id == sample_id]
+for(sample_id in singlet_summary$sample_id) {
+  qc_list$pbmc_sample_hto_stats[[sample_id]]$n_singlets <- singlet_summary$n_singlets[singlet_summary$sample_id == sample_id]
 }
 
 qc_table(singlet_summary)
@@ -428,7 +418,7 @@ ggplot() +
                      breaks = singlet_plot_data$x,
                      labels = paste0(singlet_plot_data$hto_barcode,
                                      "\n",
-                                     singlet_plot_data$pbmc_sample_id)) +
+                                     singlet_plot_data$sample_id)) +
   scale_y_continuous("N Singlets") +
   theme_bw(base_size = 8) +
   theme(axis.text.x = element_text(angle = 90,

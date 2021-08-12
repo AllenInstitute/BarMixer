@@ -3,7 +3,7 @@
 #' This function uses the "SI" method provided by multimode::modetest() with B = 20.
 #'
 #' @param x a numeric vector of hash count values
-#' @param p.cutoff a nuemric value indicating the p-value cutoff for a test of multimodality. If p.value > p.cutoff, the distribution is unimodal.
+#' @param p.cutoff a numeric value indicating the p-value cutoff for a test of multimodality. If p.value > p.cutoff, the distribution is unimodal.
 #'
 #' @return a logical value. TRUE if x appears unimodal based on the p-value cutoff.
 #'
