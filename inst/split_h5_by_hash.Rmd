@@ -26,11 +26,11 @@ params:
 - [Data Output](#data_output)
 
 #### [QC Metrics and Plots](#qc_metrics)
-  - [HTO-Based QC](#hash_qc)
-  - [Counts](#counts)
-  - [Reads](#reads)
-  - [UMIs](#umis)
-  - [Genes](#genes)
+- [HTO-Based QC](#hash_qc)
+- [Counts](#counts)
+- [Reads](#reads)
+- [UMIs](#umis)
+- [Genes](#genes)
 - [Write QC JSON](#json_out)
 
 #### [Session Info](#session_info)
@@ -234,10 +234,10 @@ qc_list <- list(report_type = "split_h5_by_hash",
 Metadata prep
 ```{r}
 meta <- as.data.table(meta)
-if("pbmc_sample_id" %in% names(meta)) {
-  meta$plot_barcode <- paste0(meta$hto_barcode,"\n",meta$pbmc_sample_id)
+if("sample_id" %in% names(meta)) {
+  meta$plot_barcode <- paste0(meta$hto_barcode,"\n",meta$sample_id)
 } else {
-  meta$pbmc_sample_id <- "No PBMC ID"
+  meta$sample_id <- "no_sample_id"
   meta$plot_barcode <- meta$hto_barcode
 }
 ```
@@ -256,12 +256,12 @@ hto_count_stats <- meta[, .(n_cells = nrow(.SD),
 hto_count_stats <- hto_count_stats[match(hto_order,hto_count_stats$hto_category),]
 
 qc_list$hto_category_stats <- lapply(1:nrow(hto_count_stats),
-                                      function(x) {
-                                        list(n_cells = hto_count_stats$n_cells[x],
-                                             frac_cells = hto_count_stats$frac_cells[x],
-                                             total_aligned_reads = hto_count_stats$total_aligned_reads[x],
-                                             frac_all_aligned_reads = hto_count_stats$frac_all_aligned_reads[x])
-                                      })
+                                     function(x) {
+                                       list(n_cells = hto_count_stats$n_cells[x],
+                                            frac_cells = hto_count_stats$frac_cells[x],
+                                            total_aligned_reads = hto_count_stats$total_aligned_reads[x],
+                                            frac_all_aligned_reads = hto_count_stats$frac_all_aligned_reads[x])
+                                     })
 names(qc_list$hto_category_stats) <- hto_count_stats$hto_category
 
 qc_table(hto_count_stats)
@@ -343,15 +343,15 @@ singlet_meta <- as.data.table(meta[meta$hto_category == "singlet",])
 
 bc_count_stats <- singlet_meta[, .(n_singlets = nrow(.SD),
                                    frac_singlets = round(nrow(.SD)/nrow(singlet_meta), 4)),
-                               by = list(pbmc_sample_id,hto_barcode)]
+                               by = list(sample_id,hto_barcode)]
 
 qc_list$pbmc_sample_singlet_stats <- lapply(1:nrow(bc_count_stats),
-                                      function(x) {
-                                        list(hto_barcode = bc_count_stats$hto_barcode[x],
-                                             n_singlets = bc_count_stats$n_singlets[x],
-                                             frac_singlets = bc_count_stats$frac_singlets[x])
-                                      })
-names(qc_list$pbmc_sample_singlet_stats) <- bc_count_stats$pbmc_sample_id
+                                            function(x) {
+                                              list(hto_barcode = bc_count_stats$hto_barcode[x],
+                                                   n_singlets = bc_count_stats$n_singlets[x],
+                                                   frac_singlets = bc_count_stats$frac_singlets[x])
+                                            })
+names(qc_list$pbmc_sample_singlet_stats) <- bc_count_stats$sample_id
 
 
 qc_table(bc_count_stats)
@@ -408,12 +408,12 @@ qc_table(hto_read_stats)
 bc_read_stats <- singlet_meta[, .(q25 = quantile(n_reads, 0.25),
                                   median = quantile(n_reads, 0.50),
                                   q75 = quantile(n_reads, 0.75)),
-                              by = list(pbmc_sample_id,hto_barcode)]
+                              by = list(sample_id,hto_barcode)]
 
-for(sample_id in bc_read_stats$pbmc_sample_id) {
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_q25 <- bc_read_stats$q25[bc_read_stats$pbmc_sample_id == sample_id]
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_median <- bc_read_stats$median[bc_read_stats$pbmc_sample_id == sample_id]
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_q75 <- bc_read_stats$q75[bc_read_stats$pbmc_sample_id == sample_id]
+for(sample_id in bc_read_stats$sample_id) {
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_q25 <- bc_read_stats$q25[bc_read_stats$sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_median <- bc_read_stats$median[bc_read_stats$sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$mapped_reads_per_cell_q75 <- bc_read_stats$q75[bc_read_stats$sample_id == sample_id]
 }
 
 qc_table(bc_read_stats)
@@ -472,12 +472,12 @@ qc_table(hto_umi_stats)
 bc_umi_stats <- singlet_meta[, .(q25 = quantile(n_umis, 0.25),
                                  median = quantile(n_umis, 0.50),
                                  q75 = quantile(n_umis, 0.75)),
-                             by = list(pbmc_sample_id,hto_barcode)]
+                             by = list(sample_id,hto_barcode)]
 
-for(sample_id in bc_umi_stats$pbmc_sample_id) {
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_q25 <- bc_umi_stats$q25[bc_umi_stats$pbmc_sample_id == sample_id]
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_median <- bc_umi_stats$median[bc_umi_stats$pbmc_sample_id == sample_id]
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_q75 <- bc_umi_stats$q75[bc_umi_stats$pbmc_sample_id == sample_id]
+for(sample_id in bc_umi_stats$sample_id) {
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_q25 <- bc_umi_stats$q25[bc_umi_stats$sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_median <- bc_umi_stats$median[bc_umi_stats$sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$umis_per_cell_q75 <- bc_umi_stats$q75[bc_umi_stats$sample_id == sample_id]
 }
 
 qc_table(bc_umi_stats)
@@ -536,12 +536,12 @@ qc_table(hto_gene_stats)
 bc_gene_stats <- singlet_meta[, .(q25 = quantile(n_genes, 0.25),
                                   median = quantile(n_genes, 0.50),
                                   q75 = quantile(n_genes, 0.75)),
-                              by = list(pbmc_sample_id,hto_barcode)]
+                              by = list(sample_id,hto_barcode)]
 
-for(sample_id in bc_gene_stats$pbmc_sample_id) {
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_q25 <- bc_gene_stats$q25[bc_gene_stats$pbmc_sample_id == sample_id]
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_median <- bc_gene_stats$median[bc_gene_stats$pbmc_sample_id == sample_id]
-  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_q75 <- bc_gene_stats$q75[bc_gene_stats$pbmc_sample_id == sample_id]
+for(sample_id in bc_gene_stats$sample_id) {
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_q25 <- bc_gene_stats$q25[bc_gene_stats$sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_median <- bc_gene_stats$median[bc_gene_stats$sample_id == sample_id]
+  qc_list$pbmc_sample_singlet_stats[[sample_id]]$genes_per_cell_q75 <- bc_gene_stats$q75[bc_gene_stats$sample_id == sample_id]
 }
 
 qc_table(bc_gene_stats)
