@@ -24,14 +24,14 @@ params:
 #### [QC Metrics and Plots](#qc_metrics)
 - [Pool-Based QC](#pool_qc)
 - [Well-Based QC](#well_qc)
-  - [Counts, Reads, Genes, and UMIs](#well_overview)
-  - [HTO Category by Well](#well_category_counts)
-  - [HTO Barcodes by Well](#well_barcode_counts)
+- [Counts, Reads, Genes, and UMIs](#well_overview)
+- [HTO Category by Well](#well_category_counts)
+- [HTO Barcodes by Well](#well_barcode_counts)
 - [HTO-Based QC](#hash_qc)
-  - [Counts](#hash_counts)
-  - [Reads](#hash_reads)
-  - [UMIs](#hash_umis)
-  - [Genes](#hash_genes)
+- [Counts](#hash_counts)
+- [Reads](#hash_reads)
+- [UMIs](#hash_umis)
+- [Genes](#hash_genes)
 - [Write QC JSON](#json_out)
 
 #### [Session Info](#session_info)
@@ -130,7 +130,7 @@ stm(paste0("Identified ", length(unique_hashes), " hash patterns: ", paste(uniqu
 meta_list <- list()
 for(i in seq_along(unique_hashes)) {
   current_hash <- unique_hashes[i]
-
+  
   stm(paste0("Merging for hash ", current_hash))
   current_files <- in_file_paths[in_file_hashes == current_hash]
   for(f in current_files) {
@@ -160,19 +160,11 @@ for(i in seq_along(unique_hashes)) {
     out_file <- file.path(out_dir, 
                           paste0(current_pool, "_",
                                  current_hash, ".h5"))
-    t_out_file <- file.path(out_dir, 
-                            paste0("transposed_",
-                                   current_pool, "_",
-                                   current_hash, ".h5"))
   } else {
-    current_pbmc_id <- meta_list[[current_hash]]$pbmc_sample_id[1]
+    current_sample_id <- meta_list[[current_hash]]$sample_id[1]
     out_file <- file.path(out_dir, 
                           paste0(current_pool, "_",
-                                 current_pbmc_id, ".h5"))
-    t_out_file <- file.path(out_dir, 
-                            paste0("transposed_",
-                                   current_pool, "_",
-                                   current_pbmc_id, ".h5"))
+                                 current_sample_id, ".h5"))
   }
   
   stm(paste0("Writing HDF5 to     : ", out_file))
@@ -194,23 +186,23 @@ for(i in seq_along(unique_hashes)) {
 stm("Generating QC Metrics and Plots for Report")
 all_meta <- do.call("rbind", meta_list)
 all_meta <- as.data.table(all_meta)
-if("pbmc_sample_id" %in% names(all_meta)) {
+if("sample_id" %in% names(all_meta)) {
   all_meta$plot_barcode <- paste0(all_meta$hto_barcode,
                                   "\n",
-                                  all_meta$pbmc_sample_id)
+                                  all_meta$sample_id)
   
-  hto_barcode_to_pbmc_id <- data.frame(hto_barcode = unique(all_meta$hto_barcode),
-                                       pbmc_sample_id = unique(all_meta$pbmc_sample_id))
+  hto_barcode_to_sample_id <- data.frame(hto_barcode = unique(all_meta$hto_barcode),
+                                         sample_id = unique(all_meta$sample_id))
 } else {
-  all_meta$pbmc_sample_id <- "No PBMC ID"
+  all_meta$sample_id <- "No PBMC ID"
   all_meta$plot_barcode <- all_meta$hto_barcode
   
-  hto_barcode_to_pbmc_id <- data.frame(pbmc_sample_id = "No PBMC ID",
-                                       hto_barcode = unique(all_meta$hto_barcode))
+  hto_barcode_to_sample_id <- data.frame(sample_id = "No PBMC ID",
+                                         hto_barcode = unique(all_meta$hto_barcode))
 }
 
 singlet_meta <- all_meta[hto_category == "singlet"]
-hto_barcode_to_pbmc_id <- as.data.table(hto_barcode_to_pbmc_id)
+hto_barcode_to_sample_id <- as.data.table(hto_barcode_to_sample_id)
 
 qc_list <- list(report_type = "merge_h5_by_hash",
                 report_datetime = as.character(start_time),
@@ -255,12 +247,12 @@ hto_category_metrics <- all_meta[,.(n_cells = nrow(.SD),
                                  by = hto_category]
 
 qc_list$hto_category_stats <- lapply(1:nrow(hto_category_metrics),
-                                      function(x) {
-                                        list(n_cells = hto_category_metrics$n_cells[x],
-                                             median_reads = hto_category_metrics$median_reads[x],
-                                             median_umis = hto_category_metrics$median_umis[x],
-                                             median_genes = hto_category_metrics$median_genes[x])
-                                      })
+                                     function(x) {
+                                       list(n_cells = hto_category_metrics$n_cells[x],
+                                            median_reads = hto_category_metrics$median_reads[x],
+                                            median_umis = hto_category_metrics$median_umis[x],
+                                            median_genes = hto_category_metrics$median_genes[x])
+                                     })
 names(qc_list$hto_category_stats) <- hto_category_metrics$hto_category
 
 qc_table(hto_category_metrics)
@@ -409,17 +401,17 @@ hto_barcode_count_by_well <- dcast(hto_barcode_by_well,
                                    formula = hto_barcode ~ well_id,
                                    value.var = "n_cells")
 
-hto_barcode_count_by_well <- hto_barcode_to_pbmc_id[hto_barcode_count_by_well,
-                                                    on = "hto_barcode"]
+hto_barcode_count_by_well <- hto_barcode_to_sample_id[hto_barcode_count_by_well,
+                                                      on = "hto_barcode"]
 
 for(well in names(hto_category_count_by_well)[-1]) {
   pbmc_sample_list <- as.list(hto_barcode_count_by_well[[well]])
-  names(pbmc_sample_list) <- hto_barcode_count_by_well$pbmc_sample_id
+  names(pbmc_sample_list) <- hto_barcode_count_by_well$sample_id
   qc_list$well_stats[[well]]$pbmc_sample_singlet_counts <- pbmc_sample_list
 }
 
-for(sample_id in hto_barcode_count_by_well$pbmc_sample_id) {
-  sample_row <- hto_barcode_count_by_well[hto_barcode_count_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+for(sample_id in hto_barcode_count_by_well$sample_id) {
+  sample_row <- hto_barcode_count_by_well[hto_barcode_count_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
   qc_list$pbmc_sample_stats[[sample_id]]$well_counts <- as.list(sample_row)
@@ -464,8 +456,8 @@ hto_barcode_frac_by_well <- dcast(hto_barcode_by_well,
                                   formula = hto_barcode ~ well_id,
                                   value.var = "frac_cells")
 
-hto_barcode_frac_by_well <- hto_barcode_to_pbmc_id[hto_barcode_frac_by_well,
-                                                   on = "hto_barcode"]
+hto_barcode_frac_by_well <- hto_barcode_to_sample_id[hto_barcode_frac_by_well,
+                                                     on = "hto_barcode"]
 
 qc_table(hto_barcode_frac_by_well)
 ```
@@ -512,11 +504,11 @@ hto_barcode_metrics <- singlet_meta[,.(n_cells = nrow(.SD),
                                        median_genes = as.numeric(median(n_genes))),
                                     by = hto_barcode]
 
-hto_barcode_metrics <- hto_barcode_to_pbmc_id[hto_barcode_metrics,
-                                              on = "hto_barcode"]
+hto_barcode_metrics <- hto_barcode_to_sample_id[hto_barcode_metrics,
+                                                on = "hto_barcode"]
 
-for(sample_id in hto_barcode_metrics$pbmc_sample_id) {
-  sample_row <- hto_barcode_metrics[hto_barcode_metrics$pbmc_sample_id == sample_id, , drop = FALSE]
+for(sample_id in hto_barcode_metrics$sample_id) {
+  sample_row <- hto_barcode_metrics[hto_barcode_metrics$sample_id == sample_id, , drop = FALSE]
   qc_list$pbmc_sample_stats[[sample_id]] <- as.list(sample_row[, -2])
 }
 
@@ -563,18 +555,18 @@ reads_hto_barcode_by_well <- dcast(reads_hto_barcode_by_well,
                                    formula = hto_barcode ~ well_id,
                                    value.var = "median_reads")
 
-reads_hto_barcode_by_well <- hto_barcode_to_pbmc_id[reads_hto_barcode_by_well,
-                                                    on = "hto_barcode"]
+reads_hto_barcode_by_well <- hto_barcode_to_sample_id[reads_hto_barcode_by_well,
+                                                      on = "hto_barcode"]
 
 for(well in names(reads_hto_barcode_by_well)[-c(1,2)]) {
   pbmc_sample_list <- as.list(reads_hto_barcode_by_well[[well]])
-  names(pbmc_sample_list) <- reads_hto_barcode_by_well$pbmc_sample_id
+  names(pbmc_sample_list) <- reads_hto_barcode_by_well$sample_id
   
   qc_list$well_stats[[well]]$pbmc_sample_mapped_reads_median <- pbmc_sample_list
 }
 
-for(sample_id in reads_hto_barcode_by_well$pbmc_sample_id) {
-  sample_row <- reads_hto_barcode_by_well[reads_hto_barcode_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+for(sample_id in reads_hto_barcode_by_well$sample_id) {
+  sample_row <- reads_hto_barcode_by_well[reads_hto_barcode_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
   qc_list$pbmc_sample_stats[[sample_id]]$well_mapped_reads_median <- as.list(sample_row)
@@ -622,18 +614,18 @@ umis_hto_barcode_by_well <- dcast(umis_hto_barcode_by_well,
                                   formula = hto_barcode ~ well_id,
                                   value.var = "median_umis")
 
-umis_hto_barcode_by_well <- hto_barcode_to_pbmc_id[umis_hto_barcode_by_well,
-                                                   on = "hto_barcode"]
+umis_hto_barcode_by_well <- hto_barcode_to_sample_id[umis_hto_barcode_by_well,
+                                                     on = "hto_barcode"]
 
 for(well in names(umis_hto_barcode_by_well)[-c(1,2)]) {
   pbmc_sample_list <- as.list(umis_hto_barcode_by_well[[well]])
-  names(pbmc_sample_list) <- umis_hto_barcode_by_well$pbmc_sample_id
+  names(pbmc_sample_list) <- umis_hto_barcode_by_well$sample_id
   
   qc_list$well_stats[[well]]$pbmc_sample_umis_median <- pbmc_sample_list
 }
 
-for(sample_id in umis_hto_barcode_by_well$pbmc_sample_id) {
-  sample_row <- umis_hto_barcode_by_well[umis_hto_barcode_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+for(sample_id in umis_hto_barcode_by_well$sample_id) {
+  sample_row <- umis_hto_barcode_by_well[umis_hto_barcode_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
   qc_list$pbmc_sample_stats[[sample_id]]$well_umis_median <- as.list(sample_row)
@@ -681,18 +673,18 @@ genes_hto_barcode_by_well <- dcast(genes_hto_barcode_by_well,
                                    formula = hto_barcode ~ well_id,
                                    value.var = "median_genes")
 
-genes_hto_barcode_by_well <- hto_barcode_to_pbmc_id[genes_hto_barcode_by_well,
-                                                    on = "hto_barcode"]
+genes_hto_barcode_by_well <- hto_barcode_to_sample_id[genes_hto_barcode_by_well,
+                                                      on = "hto_barcode"]
 
 for(well in names(genes_hto_barcode_by_well)[-c(1,2)]) {
   pbmc_sample_list <- as.list(genes_hto_barcode_by_well[[well]])
-  names(pbmc_sample_list) <- genes_hto_barcode_by_well$pbmc_sample_id
+  names(pbmc_sample_list) <- genes_hto_barcode_by_well$sample_id
   
   qc_list$well_stats[[well]]$pbmc_sample_genes_median <- pbmc_sample_list
 }
 
-for(sample_id in genes_hto_barcode_by_well$pbmc_sample_id) {
-  sample_row <- genes_hto_barcode_by_well[genes_hto_barcode_by_well$pbmc_sample_id == sample_id, ,drop = FALSE] 
+for(sample_id in genes_hto_barcode_by_well$sample_id) {
+  sample_row <- genes_hto_barcode_by_well[genes_hto_barcode_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
   qc_list$pbmc_sample_stats[[sample_id]]$well_genes_median <- as.list(sample_row)
