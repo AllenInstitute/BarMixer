@@ -222,7 +222,7 @@ hto_barcodes_to_sample_ids <- function(x,
 
 hash_category_table <- category_results$hash_category_table
 hash_category_table$sample_id <- hto_barcodes_to_sample_ids(hash_category_table$hto_barcode,
-                                                                 in_hto_key)
+                                                            in_hto_key)
 
 rownames(hash_category_table) <- NULL
 
@@ -388,7 +388,7 @@ if(n_no_sample_id > 0) {
 }
 
 for(sample_id in singlet_summary$sample_id) {
-  qc_list$pbmc_sample_hto_stats[[sample_id]]$n_singlets <- singlet_summary$n_singlets[singlet_summary$sample_id == sample_id]
+  qc_list$sample_hto_stats[[sample_id]]$n_singlets <- singlet_summary$n_singlets[singlet_summary$sample_id == sample_id]
 }
 
 qc_table(singlet_summary)

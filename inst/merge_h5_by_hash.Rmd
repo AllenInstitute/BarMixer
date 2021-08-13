@@ -405,16 +405,16 @@ hto_barcode_count_by_well <- hto_barcode_to_sample_id[hto_barcode_count_by_well,
                                                       on = "hto_barcode"]
 
 for(well in names(hto_category_count_by_well)[-1]) {
-  pbmc_sample_list <- as.list(hto_barcode_count_by_well[[well]])
-  names(pbmc_sample_list) <- hto_barcode_count_by_well$sample_id
-  qc_list$well_stats[[well]]$pbmc_sample_singlet_counts <- pbmc_sample_list
+  sample_list <- as.list(hto_barcode_count_by_well[[well]])
+  names(sample_list) <- hto_barcode_count_by_well$sample_id
+  qc_list$well_stats[[well]]$sample_singlet_counts <- sample_list
 }
 
 for(sample_id in hto_barcode_count_by_well$sample_id) {
   sample_row <- hto_barcode_count_by_well[hto_barcode_count_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
-  qc_list$pbmc_sample_stats[[sample_id]]$well_counts <- as.list(sample_row)
+  qc_list$sample_stats[[sample_id]]$well_counts <- as.list(sample_row)
 }
 
 qc_table(hto_barcode_count_by_well)
@@ -509,7 +509,7 @@ hto_barcode_metrics <- hto_barcode_to_sample_id[hto_barcode_metrics,
 
 for(sample_id in hto_barcode_metrics$sample_id) {
   sample_row <- hto_barcode_metrics[hto_barcode_metrics$sample_id == sample_id, , drop = FALSE]
-  qc_list$pbmc_sample_stats[[sample_id]] <- as.list(sample_row[, -2])
+  qc_list$sample_stats[[sample_id]] <- as.list(sample_row[, -2])
 }
 
 qc_table(hto_barcode_metrics)
@@ -559,17 +559,17 @@ reads_hto_barcode_by_well <- hto_barcode_to_sample_id[reads_hto_barcode_by_well,
                                                       on = "hto_barcode"]
 
 for(well in names(reads_hto_barcode_by_well)[-c(1,2)]) {
-  pbmc_sample_list <- as.list(reads_hto_barcode_by_well[[well]])
-  names(pbmc_sample_list) <- reads_hto_barcode_by_well$sample_id
+  sample_list <- as.list(reads_hto_barcode_by_well[[well]])
+  names(sample_list) <- reads_hto_barcode_by_well$sample_id
   
-  qc_list$well_stats[[well]]$pbmc_sample_mapped_reads_median <- pbmc_sample_list
+  qc_list$well_stats[[well]]$sample_mapped_reads_median <- sample_list
 }
 
 for(sample_id in reads_hto_barcode_by_well$sample_id) {
   sample_row <- reads_hto_barcode_by_well[reads_hto_barcode_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
-  qc_list$pbmc_sample_stats[[sample_id]]$well_mapped_reads_median <- as.list(sample_row)
+  qc_list$sample_stats[[sample_id]]$well_mapped_reads_median <- as.list(sample_row)
 }
 
 qc_table(reads_hto_barcode_by_well)
@@ -618,17 +618,17 @@ umis_hto_barcode_by_well <- hto_barcode_to_sample_id[umis_hto_barcode_by_well,
                                                      on = "hto_barcode"]
 
 for(well in names(umis_hto_barcode_by_well)[-c(1,2)]) {
-  pbmc_sample_list <- as.list(umis_hto_barcode_by_well[[well]])
-  names(pbmc_sample_list) <- umis_hto_barcode_by_well$sample_id
+  sample_list <- as.list(umis_hto_barcode_by_well[[well]])
+  names(sample_list) <- umis_hto_barcode_by_well$sample_id
   
-  qc_list$well_stats[[well]]$pbmc_sample_umis_median <- pbmc_sample_list
+  qc_list$well_stats[[well]]$sample_umis_median <- sample_list
 }
 
 for(sample_id in umis_hto_barcode_by_well$sample_id) {
   sample_row <- umis_hto_barcode_by_well[umis_hto_barcode_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
-  qc_list$pbmc_sample_stats[[sample_id]]$well_umis_median <- as.list(sample_row)
+  qc_list$sample_stats[[sample_id]]$well_umis_median <- as.list(sample_row)
 }
 
 qc_table(umis_hto_barcode_by_well)
@@ -677,17 +677,17 @@ genes_hto_barcode_by_well <- hto_barcode_to_sample_id[genes_hto_barcode_by_well,
                                                       on = "hto_barcode"]
 
 for(well in names(genes_hto_barcode_by_well)[-c(1,2)]) {
-  pbmc_sample_list <- as.list(genes_hto_barcode_by_well[[well]])
-  names(pbmc_sample_list) <- genes_hto_barcode_by_well$sample_id
+  sample_list <- as.list(genes_hto_barcode_by_well[[well]])
+  names(sample_list) <- genes_hto_barcode_by_well$sample_id
   
-  qc_list$well_stats[[well]]$pbmc_sample_genes_median <- pbmc_sample_list
+  qc_list$well_stats[[well]]$sample_genes_median <- sample_list
 }
 
 for(sample_id in genes_hto_barcode_by_well$sample_id) {
   sample_row <- genes_hto_barcode_by_well[genes_hto_barcode_by_well$sample_id == sample_id, ,drop = FALSE] 
   sample_row <- sample_row[,-c(1,2)]
   
-  qc_list$pbmc_sample_stats[[sample_id]]$well_genes_median <- as.list(sample_row)
+  qc_list$sample_stats[[sample_id]]$well_genes_median <- as.list(sample_row)
 }
 
 qc_table(genes_hto_barcode_by_well)
