@@ -395,10 +395,10 @@ add_h5_list_hash_results <- function(h5_list,
                                      "/matrix/observations/hto_barcode",
                                      common_hash_table$hto_barcode)
   
-  if("pbmc_sample_id" %in% names(common_hash_table)) {
+  if("sample_id" %in% names(common_hash_table)) {
     h5_list <- BarMixer::set_list_path(h5_list,
-                                       "/matrix/observations/pbmc_sample_id",
-                                       common_hash_table$pbmc_sample_id)
+                                       "/matrix/observations/sample_id",
+                                       common_hash_table$sample_id)
   }
   
   for(sparse_matrix in sparse_matrices) {
