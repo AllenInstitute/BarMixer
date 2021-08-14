@@ -1,6 +1,6 @@
 ## BarMixer
 
-See the [BarWare-pipeline](https://github.com/aifimmunology/BarWare-pipeline) repository for easy BarMixer usage.
+See the [BarWare-pipeline](https://github.com/AllenInstitute/BarWare-pipeline) repository for easy BarMixer usage.
 
 
 
