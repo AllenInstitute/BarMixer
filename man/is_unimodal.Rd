@@ -9,7 +9,7 @@ is_unimodal(x, p.cutoff = 0.2)
 \arguments{
 \item{x}{a numeric vector of hash count values}
 
-\item{p.cutoff}{a nuemric value indicating the p-value cutoff for a test of multimodality. If p.value > p.cutoff, the distribution is unimodal.}
+\item{p.cutoff}{a numeric value indicating the p-value cutoff for a test of multimodality. If p.value > p.cutoff, the distribution is unimodal.}
 }
 \value{
 a logical value. TRUE if x appears unimodal based on the p-value cutoff.
