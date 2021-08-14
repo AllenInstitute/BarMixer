@@ -211,7 +211,7 @@ qc_list <- list(report_type = "merge_h5_by_hash",
                 package_version = sessionInfo()$otherPkgs$BarMixer$Version,
                 pool_id = current_pool)
 
-out_json <- file.path(in_dir, paste0(current_pool, "_merge_h5_metrics.json"))
+out_json <- file.path(out_dir, paste0(current_pool, "_merge_h5_metrics.json"))
 stm(paste0("OUT JSON            : ", out_json))
 print(paste0("OUT JSON            : ", out_json))
 ```
