@@ -227,6 +227,10 @@ if(well_type == "aifi") {
 
   h5_list <- add_well_metadata(h5_list,
                              well_id = in_well)
+} else {
+  h5_list <- set_list_path(h5_list,
+                           "/matrix/observations/well_id",
+                           rep(in_well, length(h5_list$matrix$barcodes)))
 }
 ```
 
