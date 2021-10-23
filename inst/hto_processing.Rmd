@@ -13,7 +13,7 @@ params:
   in_file: NULL
   in_samples: NULL
   in_well: NULL
-  in_min_cutoff: "auto"
+  in_min_cutoff: "10"
   in_eel: "TRUE"
   out_dir: NULL
 ---
@@ -72,7 +72,7 @@ in_well <- params$in_well
 if(is.null(params$in_min_cutoff)) {
   in_min_cutoff <- "auto"
 } else {
-  in_min_cutoff <- params$in_min_cutoff
+  in_min_cutoff <- as.numeric(params$in_min_cutoff)
 }
 if(is.null(params$in_eel)) {
   in_eel <- TRUE
