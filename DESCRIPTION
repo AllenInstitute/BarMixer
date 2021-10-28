@@ -1,8 +1,8 @@
 Package: BarMixer
 Type: Package
 Title: Hashed scRNA-seq demultiplexing for .h5 files 
-Version: 1.0.0
-Author: Who wrote it
+Version: 1.0.1
+Author: Lucas Graybuck <lucasg@alleninstitute.org>
 Maintainer: Lucas Graybuck <lucasg@alleninstitute.org>
 Description: Barcode-based demultiplexing of hashed scRNA-seq datasets
 License: see file LICENSE
