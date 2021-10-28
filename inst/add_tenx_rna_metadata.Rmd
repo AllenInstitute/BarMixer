@@ -10,6 +10,7 @@ output:
     self_contained: true
 params:
   in_tenx: NULL
+  in_sample: NULL
   in_well: NULL
   out_dir: NULL
 ---
@@ -121,6 +122,14 @@ if(!file.exists(in_sum)) {
   stm(paste0("Found metrics file:", in_sum))
 }
 
+if(well_type == "other") {
+  if(!file.exists(in_sample)) {
+    stm(paste0("ERROR: Cannot find IN Sample Sheet file:", in_sample))
+    stop()
+  } else {
+    stm(paste0("Found Sample Sheet file:", in_sample))
+  }
+}
 ```
 
 #### Create out directory if missing
@@ -231,6 +240,13 @@ if(well_type == "aifi") {
   h5_list <- set_list_path(h5_list,
                            "/matrix/observations/well_id",
                            rep(in_well, length(h5_list$matrix$barcodes)))
+  
+  sample_sheet <- read.csv(in_sample)
+  batch_id <- sample_sheet$batch_id[sample_sheet$well_id == in_well]
+  
+  h5_list <- set_list_path(h5_list,
+                           "/matrix/observations/batch_id/",
+                           rep(batch_id, length(h5_list$matrix$barcodes)))
 }
 ```
 
