@@ -154,7 +154,12 @@ for(i in seq_along(unique_hashes)) {
   
   meta_list[[current_hash]] <- h5_list_cell_metadata(h5_list)
   
-  current_pool <- meta_list[[current_hash]]$pool_id[1]
+  if("pool_id" %in% names(meta_list[[current_hash]])) {
+      current_pool <- meta_list[[current_hash]]$pool_id[1]
+  } else {
+    current_pool <- "merged"
+  }
+  
   
   if(current_hash == "multiplet") {
     out_file <- file.path(out_dir, 
@@ -208,10 +213,9 @@ qc_list <- list(report_type = "merge_h5_by_hash",
                 report_datetime = as.character(start_time),
                 report_uuid = ids::uuid(use_time = TRUE),
                 package = "BarMixer",
-                package_version = sessionInfo()$otherPkgs$BarMixer$Version,
-                pool_id = current_pool)
+                package_version = sessionInfo()$otherPkgs$BarMixer$Version)
 
-out_json <- file.path(out_dir, paste0(current_pool, "_merge_h5_metrics.json"))
+out_json <- file.path(out_dir, paste0(current_pool, "_final_h5_metrics.json"))
 stm(paste0("OUT JSON            : ", out_json))
 print(paste0("OUT JSON            : ", out_json))
 ```
