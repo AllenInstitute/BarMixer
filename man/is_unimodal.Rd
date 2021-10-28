@@ -15,5 +15,5 @@ is_unimodal(x, p.cutoff = 0.2)
 a logical value. TRUE if x appears unimodal based on the p-value cutoff.
 }
 \description{
-This function uses the "SI" method provided by multimode::modetest() with B = 20.
+This function uses the "HH" method provided by multimode::modetest() with B = 20.
 }

@@ -1,6 +1,6 @@
 #' Test if a hash distribution is unimodal
 #'
-#' This function uses the "SI" method provided by multimode::modetest() with B = 20.
+#' This function uses the "HH" method provided by multimode::modetest() with B = 20.
 #'
 #' @param x a numeric vector of hash count values
 #' @param p.cutoff a numeric value indicating the p-value cutoff for a test of multimodality. If p.value > p.cutoff, the distribution is unimodal.
@@ -9,7 +9,9 @@
 #'
 is_unimodal <- function(x, p.cutoff = 0.2) {
   x <- log10(x + 1)
-  p <- multimode::modetest(x, method = "SI", B = 20)$p.value
+  p <- suppressWarnings(
+    multimode::modetest(x, method = "HH", B = 20)$p.value
+  )
   p > p.cutoff
 }
 
