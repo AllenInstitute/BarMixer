@@ -68,6 +68,7 @@ stm(paste0("Using BarMixer v", installed.packages()["BarMixer","Version"]))
 ```{r Parse arguments}
 in_tenx <- params$in_tenx
 in_well <- params$in_well
+in_sample <- params$in_sample
 out_dir <- params$out_dir
 
 # Check Well ID format
