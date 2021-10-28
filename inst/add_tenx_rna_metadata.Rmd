@@ -243,11 +243,11 @@ if(well_type == "aifi") {
                            rep(in_well, length(h5_list$matrix$barcodes)))
   
   sample_sheet <- read.csv(in_sample)
-  batch_id <- sample_sheet$batch_id[sample_sheet$well_id == in_well]
+  pool_id <- sample_sheet$pool_id[sample_sheet$well_id == in_well]
   
   h5_list <- set_list_path(h5_list,
-                           "/matrix/observations/batch_id/",
-                           rep(batch_id, length(h5_list$matrix$barcodes)))
+                           "/matrix/observations/pool_id/",
+                           rep(pool_id, length(h5_list$matrix$barcodes)))
 }
 ```
 
